@@ -117,32 +117,56 @@ export interface TaskInfo {
 }
 
 // ─────────────────────────────────────────────
-// Device 设备相关类型
+// 统一 HTTP API 请求 / 响应格式
 // ─────────────────────────────────────────────
 
-/** 设备状态枚举 */
-export enum DeviceState {
-  OFFLINE = 'offline',
-  ONLINE = 'online',
-  BUSY = 'busy',
-  ERROR = 'error',
+/** 统一成功响应 */
+export interface ApiResponse<T = unknown> {
+  success: true
+  data: T
 }
 
-/** 设备绑定请求参数 */
-export interface DeviceBindRequest {
+/** 统一错误响应 */
+export interface ApiError {
+  success: false
+  code: string
+  message: string
+}
+
+/** 统一响应类型 */
+export type ApiResult<T = unknown> = ApiResponse<T> | ApiError
+
+/** 创建设备请求 */
+export interface CreateDeviceRequest {
   name: string
   ldconsolePath: string
   instanceIndex: number
 }
 
-/** 设备信息 */
+/** 删除设备请求 */
+export interface DeleteDeviceRequest {
+  id: string
+}
+
+// ─────────────────────────────────────────────
+// Device 设备相关类型
+// ─────────────────────────────────────────────
+
+/** 设备状态枚举（仅两种） */
+export enum DeviceStatus {
+  RUNNING = 'running',
+  STOPPED = 'stopped',
+}
+
+/** 设备信息（与 devices 表对齐） */
 export interface DeviceInfo {
   id: string
   name: string
   ldconsolePath: string
   instanceIndex: number
-  state: DeviceState
-  boundAt: number
+  status: DeviceStatus
+  createdAt: number
+  updatedAt: number
 }
 
 /** ldconsole list2 解析后的实例信息 */
@@ -153,4 +177,44 @@ export interface LDInstanceInfo {
   boxHandle: number
   running: boolean
   pid: number
+}
+
+// ─────────────────────────────────────────────
+// 文件系统浏览
+// ─────────────────────────────────────────────
+
+/** 文件/目录条目 */
+export interface FileEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+}
+
+/** 文件系统浏览响应 */
+export interface BrowseResponse {
+  currentPath: string
+  parentPath: string | null
+  entries: FileEntry[]
+}
+
+/** 实例查询请求 */
+export interface ListInstancesRequest {
+  ldconsolePath: string
+}
+
+// ─────────────────────────────────────────────
+// 截屏
+// ─────────────────────────────────────────────
+
+/** 截屏请求 */
+export interface ScreenshotRequest {
+  deviceId: string
+}
+
+/** 截屏响应（PNG base64） */
+export interface ScreenshotResponse {
+  image: string // data:image/png;base64,...
+  width: number
+  height: number
+  timestamp: number
 }

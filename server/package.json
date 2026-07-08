@@ -6,20 +6,28 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@automan/shared": "workspace:*",
     "@fastify/cors": "^11.0.0",
     "@fastify/websocket": "^11.0.2",
+    "better-sqlite3": "11.8.1",
+    "drizzle-orm": "^0.45.2",
     "fastify": "^5.4.0",
     "fastify-plugin": "^5.0.1",
     "iconv-lite": "^0.7.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
     "@types/iconv-lite": "^0.0.1",
     "@types/node": "^24.0.12",
     "@types/ws": "^8.5.14",
+    "drizzle-kit": "^0.31.10",
     "pino-pretty": "^13.0.0",
     "tsx": "^4.20.3"
   }

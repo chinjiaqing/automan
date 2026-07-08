@@ -15,12 +15,16 @@ import loggerPlugin from './plugins/logger.js'
 // 服务层
 import { ActorManager } from './modules/actor/actor.manager.js'
 import { TaskService } from './modules/task/task.service.js'
-import { DeviceManager } from './modules/device/device.service.js'
 import { WsMessageType } from '@automan/shared/types.js'
+
+// 数据库
+import { sqlite } from './db/index.js'
+import { runMigrations } from './db/migrate.js'
 
 // 路由模块
 import { deviceRoutes } from './routes/device.routes.js'
 import { taskRoutes } from './routes/task.routes.js'
+import { filesystemRoutes } from './routes/filesystem.routes.js'
 
 export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -49,10 +53,13 @@ export async function createApp(): Promise<FastifyInstance> {
   await app.register(loggerPlugin)
   await app.register(wsPlugin)
 
-  // ── 3. 初始化服务层 ────────────────────────
+  // ── 3. 初始化数据库 ────────────────────────
+  runMigrations()
+  app.log.info('Database initialized and migrations applied')
+
+  // ── 4. 初始化服务层 ────────────────────────
   const actorManager = new ActorManager()
   const taskService = new TaskService(actorManager)
-  const deviceManager = new DeviceManager()
 
   // 将服务层注入 Dispatcher（延迟绑定）
   app.wsDispatcher.setServices(actorManager, taskService)
@@ -93,7 +100,8 @@ export async function createApp(): Promise<FastifyInstance> {
 
   // ── 6. 业务路由模块 ────────────────────────
   await taskRoutes(app, taskService)
-  await deviceRoutes(app, deviceManager)
+  await deviceRoutes(app)
+  await filesystemRoutes(app)
 
   // ── 7. WebSocket 路由 ──────────────────────
   app.get('/ws', { websocket: true }, (socket, req) => {
@@ -125,6 +133,8 @@ export async function createApp(): Promise<FastifyInstance> {
   app.addHook('onClose', async () => {
     app.log.info('Shutting down — destroying all actors...')
     await actorManager.destroyAll()
+    sqlite.close()
+    app.log.info('Database connection closed')
   })
 
   return app
