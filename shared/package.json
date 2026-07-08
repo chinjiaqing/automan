@@ -1,0 +1,16 @@
+{
+  "name": "@automan/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./types.js": "./src/types.ts",
+    "./utils/*.js": "./src/utils/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.12"
+  }
+}
