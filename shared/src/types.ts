@@ -218,3 +218,34 @@ export interface ScreenshotResponse {
   height: number
   timestamp: number
 }
+
+// ─────────────────────────────────────────────
+// 找图（模板匹配）
+// ─────────────────────────────────────────────
+
+/** 找图请求 */
+export interface FindPicRequest {
+  /** 截图 base64（data:image/png;base64,...） */
+  image: string
+  /** 模板图片 base64（data:image/png;base64,...） */
+  template: string
+  /** 相似度阈值 0-1，默认 0.8 */
+  threshold?: number
+  /** 最大匹配数量，默认 10 */
+  maxResults?: number
+  /** 找图区域 [x1, y1, x2, y2]，全为 0 或不传表示全图 */
+  region?: [number, number, number, number]
+}
+
+/** 单个匹配结果 */
+export interface FindPicMatch {
+  x: number
+  y: number
+  confidence: number
+}
+
+/** 找图响应 */
+export interface FindPicResponse {
+  matches: FindPicMatch[]
+  elapsed: number
+}

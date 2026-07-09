@@ -13,10 +13,12 @@ import type {
   DeviceInfo,
   ListInstancesRequest,
   ScreenshotRequest,
+  FindPicRequest,
 } from '@automan/shared/types.js'
 import { DeviceStatus } from '@automan/shared/types.js'
 import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
+import { findPic } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
 function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
@@ -219,6 +221,39 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
           success: false,
           code: 'SCREENSHOT_FAILED',
           message: err instanceof Error ? err.message : '截屏失败',
+        })
+      }
+    },
+  )
+  // ── 找图（模板匹配）──────────────────────────
+  // 图片 base64 可能较大，单独设置 bodyLimit 为 20MB
+  app.post<{ Body: FindPicRequest }>(
+    '/api/devices/find-pic',
+    { bodyLimit: 20 * 1024 * 1024 },
+    async (request, reply) => {
+      const { image, template, threshold, maxResults, region } = request.body
+      if (!image || !template) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'image 和 template 均为必填',
+        })
+      }
+
+      try {
+        const result = await findPic({
+          image,
+          template,
+          threshold,
+          maxResults,
+          region,
+        })
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'FIND_PIC_FAILED',
+          message: err instanceof Error ? err.message : '找图失败',
         })
       }
     },

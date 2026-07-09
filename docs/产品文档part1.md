@@ -11,7 +11,7 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 **当前核心能力：**
 - 多设备管理（CRUD，绑定雷电模拟器实例）
 - WebSocket 实时连接（连接即登录，断开即退出）
-- 开发板工具（设备截屏、框选坐标、缩放调整）
+- 开发板工具（设备截屏、框选坐标、缩放调整、找图匹配）
 
 ---
 
@@ -158,7 +158,7 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 - 贴边吸附：拖动距边缘 < 5px 自动贴边
 
 **Tab 区域：**
-- 找图：上传目标图片（功能待实现）
+- 找图：上传模板图片 → 调整相似度 → 在截图中搜索匹配位置，支持区域搜索（框选区域即为搜索范围）
 - OCR：识别选区文字（功能待实现）
 
 ---
@@ -207,6 +207,7 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 | POST | `/api/devices/update` | 重命名设备 |
 | POST | `/api/devices/instances` | 查询模拟器实例列表 |
 | POST | `/api/devices/screenshot` | 设备截屏（ADB screencap） |
+| POST | `/api/devices/find-pic` | 找图（模板匹配，OpenCV） |
 | GET | `/api/filesystem/browse?path=` | 浏览本地文件系统 |
 | WS | `/ws` | WebSocket 连接 |
 
@@ -231,6 +232,7 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 | 通信 | WebSocket (实时) + HTTP (REST API) |
 | 图标 | primeicons CSS 类 |
 | 包管理 | pnpm (monorepo) |
+| Python | Python 3.12+ / OpenCV（找图等图像处理能力，.venv 隔离） |
 
 ---
 
@@ -238,10 +240,15 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 
 ```
 automan/
+├── .bin/            # 分发运行时（start.bat 自动下载，不提交 git）
+│   ├── node/        # Node.js 便携版
+│   └── python/      # Python embeddable
+├── start.bat        # 一键启动（自动下载运行时 + 安装依赖 + 启动服务）
 ├── server/          # 服务端（Fastify）
 │   └── src/
 │       ├── routes/      # API 路由
 │       ├── modules/     # 业务模块（device, ws, actor, task）
+│       ├── libs/        # 工具与脚本层（Python 脚本 + TS 封装 + 统一导出）
 │       ├── db/          # 数据库（schema, migrate）
 │       └── core/        # 核心（logger, event-bus）
 ├── web/             # 前端（Vue 3）
@@ -255,6 +262,19 @@ automan/
 └── shared/          # 前后端共享（types, utils）
     └── src/types.ts
 ```
+
+---
+
+## 9. 分发与部署
+
+用户端无需安装 Node.js 和 Python，`start.bat` 自动下载所有运行时到 `.bin/` 目录：
+
+| 运行时 | 位置 | 来源 |
+|--------|------|------|
+| Node.js v24.14.1 | `.bin/node/` | USTC 镜像 |
+| Python 3.12.10 | `.bin/python/` | 华为云镜像 (embeddable) |
+
+**用户首次使用：** 运行 `start.bat` 即可，脚本自动完成环境下载、依赖安装、服务启动。
 
 ---
 

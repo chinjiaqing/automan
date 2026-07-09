@@ -6,6 +6,8 @@ import type {
   BrowseResponse,
   LDInstanceInfo,
   ScreenshotResponse,
+  FindPicRequest,
+  FindPicResponse,
 } from '@automan/shared/types.js'
 
 export const deviceApi = {
@@ -29,6 +31,10 @@ export const deviceApi = {
   /** 设备截屏 */
   screenshot: (deviceId: string) =>
     api.post<ScreenshotResponse>('/api/devices/screenshot', { deviceId }),
+
+  /** 找图（模板匹配） */
+  findPic: (data: FindPicRequest) =>
+    api.post<FindPicResponse>('/api/devices/find-pic', data),
 }
 
 /** 文件系统浏览 */
