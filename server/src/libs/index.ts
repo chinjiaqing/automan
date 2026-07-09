@@ -6,7 +6,9 @@
 // 文件结构：
 //   python-helper.ts  — Python 进程调用封装（通用）
 //   find-pic.ts       — 找图 API（业务）
+//   ocr.ts            — OCR 文字识别 API（业务）
 //   find_pic.py       — Python 找图脚本
+//   ocr.py            — Python OCR 脚本
 //   requirements.txt  — Python 依赖清单
 // ─────────────────────────────────────────────
 
@@ -14,6 +16,18 @@
 export { findPic } from './find-pic.js'
 export type { FindPicOptions, FindPicMatch, FindPicResult } from './find-pic.js'
 
+// ── OCR API ───────────────────────────────────
+export { getWords, findStr } from './ocr.js'
+export type {
+  GetWordsOptions,
+  GetWordsResult,
+  FindStrOptions,
+  FindStrResult,
+  OcrWord,
+  OcrMatch,
+  OcrColor,
+} from './ocr.js'
+
 // ── Python 工具（供其他业务扩展使用） ─────────
-export { runPythonScript, getPythonPath, getScriptPath } from './python-helper.js'
+export { runPythonScript, getPythonPath, getScriptPath, PythonWorker } from './python-helper.js'
 export type { PyOutput } from './python-helper.js'

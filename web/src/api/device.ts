@@ -8,6 +8,10 @@ import type {
   ScreenshotResponse,
   FindPicRequest,
   FindPicResponse,
+  GetWordsRequest,
+  GetWordsResponse,
+  FindStrRequest,
+  FindStrResponse,
 } from '@automan/shared/types.js'
 
 export const deviceApi = {
@@ -35,6 +39,14 @@ export const deviceApi = {
   /** 找图（模板匹配） */
   findPic: (data: FindPicRequest) =>
     api.post<FindPicResponse>('/api/devices/find-pic', data),
+
+  /** OCR 识字 */
+  ocrWords: (data: GetWordsRequest) =>
+    api.post<GetWordsResponse>('/api/devices/ocr-words', data),
+
+  /** OCR 找字 */
+  ocrFindStr: (data: FindStrRequest) =>
+    api.post<FindStrResponse>('/api/devices/ocr-find-str', data),
 }
 
 /** 文件系统浏览 */

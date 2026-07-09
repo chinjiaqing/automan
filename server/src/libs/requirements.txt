@@ -1,4 +1,5 @@
-# Python 依赖清单（安装到 server/.venv/）
-# 安装命令（从 server/ 目录执行）: .venv\Scripts\pip install -r src\libs\requirements.txt
+# Python 依赖清单
+# 安装: pip install -r server/src/libs/requirements.txt
 opencv-python>=5.0.0
 numpy>=2.0.0
+rapidocr-onnxruntime>=1.4.0

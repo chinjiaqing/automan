@@ -249,3 +249,64 @@ export interface FindPicResponse {
   matches: FindPicMatch[]
   elapsed: number
 }
+
+// ─────────────────────────────────────────
+// OCR（文字识别）
+// ─────────────────────────────────────────
+
+/** 预设颜色名称 */
+export type OcrColor =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'cyan'
+  | 'blue'
+  | 'purple'
+  | 'white'
+  | 'black'
+  | 'gray'
+
+/** OCR 识别到的单个文字块 */
+export interface OcrWord {
+  text: string
+  x: number
+  y: number
+  w: number
+  h: number
+  confidence: number
+}
+
+/** getWords 请求 */
+export interface GetWordsRequest {
+  image: string
+  region?: [number, number, number, number]
+  color?: OcrColor
+}
+
+/** getWords 响应 */
+export interface GetWordsResponse {
+  words: OcrWord[]
+  elapsed: number
+}
+
+/** findStr 匹配结果 */
+export interface OcrMatch extends OcrWord {
+  similarity: number
+}
+
+/** findStr 请求 */
+export interface FindStrRequest {
+  image: string
+  target: string
+  region?: [number, number, number, number]
+  similarity?: number
+  color?: OcrColor
+}
+
+/** findStr 响应 */
+export interface FindStrResponse {
+  matches: OcrMatch[]
+  allWords: string[]
+  elapsed: number
+}

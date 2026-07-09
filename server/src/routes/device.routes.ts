@@ -14,11 +14,13 @@ import type {
   ListInstancesRequest,
   ScreenshotRequest,
   FindPicRequest,
+  GetWordsRequest,
+  FindStrRequest,
 } from '@automan/shared/types.js'
 import { DeviceStatus } from '@automan/shared/types.js'
 import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
-import { findPic } from '../libs/index.js'
+import { findPic, getWords, findStr } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
 function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
@@ -254,6 +256,60 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
           success: false,
           code: 'FIND_PIC_FAILED',
           message: err instanceof Error ? err.message : '找图失败',
+        })
+      }
+    },
+  )
+
+  // ── OCR 识字（getWords）────────────────────────
+  app.post<{ Body: GetWordsRequest }>(
+    '/api/devices/ocr-words',
+    { bodyLimit: 20 * 1024 * 1024 },
+    async (request, reply) => {
+      const { image, region, color } = request.body
+      if (!image) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'image 为必填',
+        })
+      }
+
+      try {
+        const result = await getWords({ image, region, color })
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'OCR_WORDS_FAILED',
+          message: err instanceof Error ? err.message : 'OCR 识别失败',
+        })
+      }
+    },
+  )
+
+  // ── OCR 找字（findStr）────────────────────────
+  app.post<{ Body: FindStrRequest }>(
+    '/api/devices/ocr-find-str',
+    { bodyLimit: 20 * 1024 * 1024 },
+    async (request, reply) => {
+      const { image, target, region, similarity, color } = request.body
+      if (!image || !target) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'image 和 target 均为必填',
+        })
+      }
+
+      try {
+        const result = await findStr({ image, target, region, similarity, color })
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'OCR_FIND_STR_FAILED',
+          message: err instanceof Error ? err.message : '找字失败',
         })
       }
     },

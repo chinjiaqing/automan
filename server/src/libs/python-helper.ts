@@ -8,7 +8,7 @@
 // 本文件不包含任何业务逻辑，仅供 Python 调用工具
 // ─────────────────────────────────────────────
 
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -76,6 +76,7 @@ export function runPythonScript<T extends PyOutput = PyOutput>(
   return new Promise((resolve, reject) => {
     const py = spawn(pythonPath, [scriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
 
     let stdout = ''
@@ -130,4 +131,152 @@ export function runPythonScript<T extends PyOutput = PyOutput>(
       done({ error: `Python stdin 写入异常: ${(err as Error).message}` } as T)
     }
   })
+}
+
+// ── 持久化 Python 工作进程 ──────────────────
+
+interface PendingRequest {
+  resolve: (result: PyOutput) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
+/**
+ * 持久化 Python 工作进程
+ *
+ * 进程启动后预加载模型，后续调用直接通过 stdin 发送命令，
+ * 消除每次 spawn + 模型加载的开销。
+ *
+ * 协议：stdin/stdout 各一行一个 JSON 对象
+ */
+export class PythonWorker {
+  private proc: ChildProcess | null = null
+  private ready = false
+  private readyResolvers: (() => void)[] = []
+  private buffer = ''
+  private pending: PendingRequest[] = []
+  private readonly scriptPath: string
+
+  constructor(scriptName: string) {
+    this.scriptPath = getScriptPath(scriptName)
+  }
+
+  /** 确保进程已启动且模型已预热 */
+  private ensureStarted(): Promise<void> {
+    if (this.ready && this.proc && !this.proc.killed) {
+      return Promise.resolve()
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      this.readyResolvers.push(resolve)
+
+      if (this.proc) return // 已在启动中
+
+      const pythonPath = getPythonPath()
+      this.proc = spawn(pythonPath, ['-u', this.scriptPath, '--worker'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      })
+
+      let stderrBuf = ''
+
+      this.proc.stdout!.on('data', (chunk: Buffer) => {
+        this.buffer += chunk.toString()
+        this.flushLines()
+      })
+
+      this.proc.stderr!.on('data', (chunk: Buffer) => {
+        stderrBuf += chunk.toString()
+      })
+
+      this.proc.on('error', (err) => {
+        this.killAll(err.message)
+      })
+
+      this.proc.on('close', (code) => {
+        if (code !== 0 && stderrBuf) {
+          this.killAll(`Python worker 退出 (code=${code}): ${stderrBuf.slice(0, 500)}`)
+        }
+        this.proc = null
+        this.ready = false
+      })
+
+      this.proc.stdin!.on('error', (err) => {
+        this.killAll(`stdin 错误: ${err.message}`)
+      })
+    })
+  }
+
+  /** 解析并分发完整的 JSON 行 */
+  private flushLines(): void {
+    const lines = this.buffer.split('\n')
+    this.buffer = lines.pop() ?? '' // 保留未完成行
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+
+      try {
+        const data = JSON.parse(trimmed)
+
+        // 就绪信号
+        if (data.ready) {
+          this.ready = true
+          for (const r of this.readyResolvers) r()
+          this.readyResolvers = []
+          continue
+        }
+
+        // 正常响应
+        const pending = this.pending.shift()
+        if (pending) {
+          clearTimeout(pending.timer)
+          pending.resolve(data)
+        }
+      } catch {
+        // 忽略解析失败的行
+      }
+    }
+  }
+
+  /** 发送命令并等待结果 */
+  async send<T extends PyOutput = PyOutput>(
+    command: Record<string, unknown>,
+    timeoutMs = 30_000,
+  ): Promise<T> {
+    await this.ensureStarted()
+
+    return new Promise<T>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.shift()
+        resolve({ error: `Python worker 响应超时 (${timeoutMs}ms)` } as T)
+      }, timeoutMs)
+
+      this.pending.push({
+        resolve: resolve as (result: PyOutput) => void,
+        timer,
+      })
+
+      try {
+        this.proc!.stdin!.write(JSON.stringify(command) + '\n')
+      } catch (err) {
+        clearTimeout(timer)
+        this.pending.pop()
+        resolve({ error: `stdin 写入失败: ${(err as Error).message}` } as T)
+      }
+    })
+  }
+
+  /** 终止所有待处理请求并杀进程 */
+  private killAll(reason: string): void {
+    while (this.pending.length > 0) {
+      const p = this.pending.shift()!
+      clearTimeout(p.timer)
+      p.resolve({ error: reason })
+    }
+    if (this.proc && !this.proc.killed) {
+      this.proc.kill()
+    }
+    this.proc = null
+    this.ready = false
+  }
 }
