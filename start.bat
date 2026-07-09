@@ -2,10 +2,9 @@
 chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
-:: ── Automan 一键启动 ─────────────────────────────
-:: 自动下载 Node.js + Python，安装依赖，启动开发环境
-:: 所有运行时隔离在 .bin/ 目录，不污染系统环境
-:: ──────────────────────────────────────────────────
+:: Automan one-click launcher
+:: Auto-download Node.js + Python, install deps, start dev env
+:: All runtimes isolated in .bin/ directory
 
 set "ROOT=%~dp0"
 set "DOTBIN=%ROOT%.bin"
@@ -24,9 +23,13 @@ set "PY_URL=https://mirrors.huaweicloud.com/python/%PY_VER%/%PY_ZIP%"
 set "PIP_URL=https://bootstrap.pypa.io/get-pip.py"
 
 set "COREPACK=%NODE_DIR%\node_modules\corepack\dist\corepack.js"
+set "PNPM_CMD=%NODE_EXE% %COREPACK% pnpm"
 
-:: ── Step 0: 创建 .bin 目录 ────────────────────
+:: Force allow all build scripts
+set CI=false
+set npm_config_ignore_scripts=false
 
+:: ── Step 0: Create .bin directory ────────────────
 if not exist "%DOTBIN%" mkdir "%DOTBIN%"
 
 echo ============================================
@@ -39,6 +42,7 @@ echo.
 if exist "%NODE_EXE%" (
     echo [OK] Node.js
     "%NODE_EXE%" -v
+    echo [DEBUG] Node.js check passed, continuing...
 ) else (
     echo [1/5] Downloading Node.js %NODE_VER%...
     curl.exe -L -o "%DOTBIN%\%NODE_ZIP%" "%NODE_URL%" -#
@@ -61,7 +65,7 @@ if exist "%NODE_EXE%" (
     )
 )
 
-:: 将 bundled node 加入 PATH
+:: Add bundled node to PATH
 set "PATH=%NODE_DIR%;%PATH%"
 
 :: ── Step 2: Python ───────────────────────────
@@ -80,14 +84,12 @@ if exist "%PY_EXE%" (
     powershell -NoProfile -Command "Expand-Archive -Path '%DOTBIN%\%PY_ZIP%' -DestinationPath '%PY_DIR%' -Force"
     del "%DOTBIN%\%PY_ZIP%" 2>nul
 
-    :: 启用 import site（embed 默认禁用）
     echo import site> "%PY_DIR%\python312._pth"
     echo.>> "%PY_DIR%\python312._pth"
     echo python312.zip>> "%PY_DIR%\python312._pth"
     echo .>> "%PY_DIR%\python312._pth"
     echo Lib\site-packages>> "%PY_DIR%\python312._pth"
 
-    :: 安装 pip
     echo       Installing pip...
     curl.exe -sL -o "%DOTBIN%\get-pip.py" "%PIP_URL%"
     "%PY_EXE%" "%DOTBIN%\get-pip.py" --no-warn-script-location >nul 2>&1
@@ -102,35 +104,40 @@ if exist "%PY_EXE%" (
     )
 )
 
-:: 将 bundled python 加入 PATH
+:: Add bundled python to PATH
 set "PATH=%PY_DIR%;%PY_DIR%\Scripts;%PATH%"
 
-:: ── Step 3: pnpm + Node.js 依赖 ──────────────
+:: -- Step 3: pnpm + Node.js deps ---------------------------------------
 
-echo [3/5] Installing Node.js dependencies (pnpm --frozen-lockfile)...
+echo [3/5] Installing Node.js dependencies...
 
-:: 启用 pnpm（通过 corepack）
-where pnpm >nul 2>&1
-if !errorlevel! neq 0 (
-    if exist "%COREPACK%" (
-        "%NODE_EXE%" "%COREPACK%" enable pnpm >nul 2>&1
-        "%NODE_EXE%" "%COREPACK%" prepare pnpm@latest --activate >nul 2>&1
-    )
-)
+REM Always use corepack to run pnpm through bundled node
+echo [DEBUG] Setting up pnpm via corepack...
+"%NODE_EXE%" "%COREPACK%" enable pnpm
+
+REM Lock pnpm version
+"%NODE_EXE%" "%COREPACK%" prepare pnpm@10.8.0 --activate
+
+echo [OK] pnpm available via bundled Node.js
 
 cd /d "%ROOT%"
-pnpm install --frozen-lockfile
-if !errorlevel! neq 0 (
-    echo [WARN] pnpm install encountered issues, continuing...
-)
+echo [DEBUG] Running pnpm install...
 
-:: ── Step 4: Python 依赖 ──────────────────────
+call %PNPM_CMD% install
+
+if !errorlevel! neq 0 (
+    echo [ERROR] pnpm install failed
+    goto :fail
+)
+echo [OK] Node.js dependencies
+
+:: -- Step 4: Python deps -----------------------------------------------
 
 echo [4/5] Installing Python dependencies...
-"%PY_EXE%" -m pip install -r "%ROOT%server\src\libs\requirements.txt" --no-warn-script-location >nul 2>&1
+"%PY_EXE%" -m pip install -r "%ROOT%server\src\libs\requirements.txt" --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
 echo [OK] Python dependencies
 
-:: ── Step 5: 启动开发环境 ─────────────────────
+:: -- Step 5: Start dev servers -----------------------------------------
 
 echo.
 echo [5/5] Starting development servers...
@@ -145,18 +152,28 @@ echo  Press Ctrl+C to stop
 echo ============================================
 echo.
 
-:: 启动 server（新窗口，调用 .cmd 文件而非 node.exe）
 start "Automan Server" /D "%ROOT%server" "%ROOT%server\node_modules\.bin\tsx.cmd" watch src\server.ts
 
-:: 等待 server 启动
 timeout /t 3 /nobreak >nul
 
-:: 启动 web（新窗口）
 start "Automan Web" /D "%ROOT%web" "%ROOT%web\node_modules\.bin\vite.cmd" --host
 
-:: 保持主窗口
 echo.
 echo Development servers are running in separate windows.
 echo Close this window or press any key to exit this launcher.
 echo.
+echo ============================================
+echo  ALL DONE - Launcher finished successfully
+echo ============================================
+echo.
+pause
+goto :eof
+
+:fail
+echo.
+echo ============================================
+echo  [ERROR] Setup failed. Check the messages above.
+echo ============================================
+echo.
 pause >nul
+goto :eof

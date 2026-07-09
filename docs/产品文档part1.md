@@ -110,6 +110,8 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 
 ### 4.3 开发板（CanvasView）
 
+> 路由：`/track`，name: `track`
+
 ```
 ┌─ 操作区 (w-60) ─┐ ┌─ 截屏区 (flex-1) ──────────────────┐
 │                  │ │                                      │
@@ -123,6 +125,9 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 │                  │ │                                      │
 │ [找图] [OCR]     │ │                                      │
 │  ...             │ │                                      │
+│ ────────────── │ │                                      │
+│ [点击] [范围点击]│ │                                      │
+│  [0,0]  [点击]  │ │                                      │
 └──────────────────┘ └──────────────────────────────────────┘
 ```
 
@@ -159,7 +164,12 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 
 **Tab 区域：**
 - 找图：上传模板图片 → 调整相似度 → 在截图中搜索匹配位置，支持区域搜索（框选区域即为搜索范围）
-- OCR：识别选区文字（功能待实现）
+- OCR：识字模式（识别选区内所有文字）+ 找字模式（在截图中查找目标文字并定位），支持颜色过滤与颜色偏差
+
+**点击区域（跟随 Tab 区域下方）：**
+- 点击：输入 `[x, y]` 坐标，通过 ADB 执行单次点击
+- 范围点击：输入 `[x1, y1, x2, y2]` 矩形区域，在区域内随机取点执行点击
+- 参数格式与找图 `region` 保持一致（数组形式）
 
 ---
 
@@ -208,6 +218,10 @@ Automan 是一个面向模拟器自动化任务的控制面板。用户通过 We
 | POST | `/api/devices/instances` | 查询模拟器实例列表 |
 | POST | `/api/devices/screenshot` | 设备截屏（ADB screencap） |
 | POST | `/api/devices/find-pic` | 找图（模板匹配，OpenCV） |
+| POST | `/api/devices/ocr-words` | OCR 识字（RapidOCR） |
+| POST | `/api/devices/ocr-find-str` | OCR 找字（滑动窗口 + Levenshtein 模糊匹配） |
+| POST | `/api/devices/click` | ADB 单点点击 |
+| POST | `/api/devices/area-click` | ADB 范围随机点击 |
 | GET | `/api/filesystem/browse?path=` | 浏览本地文件系统 |
 | WS | `/ws` | WebSocket 连接 |
 
@@ -249,13 +263,21 @@ automan/
 │       ├── routes/      # API 路由
 │       ├── modules/     # 业务模块（device, ws, actor, task）
 │       ├── libs/        # 工具与脚本层（Python 脚本 + TS 封装 + 统一导出）
+│       │   ├── index.ts         # 统一导出层
+│       │   ├── python-helper.ts # Python 进程调用封装 + PythonWorker
+│       │   ├── find-pic.ts      # 找图 API
+│       │   ├── ocr.ts           # OCR 文字识别 API
+│       │   ├── adb-click.ts     # ADB 点击 API（单点 + 范围随机）
+│       │   ├── find_pic.py      # Python 找图脚本（OpenCV）
+│       │   ├── ocr.py           # Python OCR 脚本（RapidOCR）
+│       │   └── requirements.txt # Python 依赖清单
 │       ├── db/          # 数据库（schema, migrate）
 │       └── core/        # 核心（logger, event-bus）
 ├── web/             # 前端（Vue 3）
 │   └── src/
 │       ├── views/       # 页面（LoginView, HomeView, CanvasView）
-│       ├── components/  # 组件（AppHeader, DeviceDialog）
-│       ├── composables/ # 状态管理（useWebSocket, useDevices）
+│       ├── components/  # 组件（AppHeader, DeviceDialog, FindPicPanel, OcrPanel）
+│       ├── composables/ # 状态管理（useWebSocket, useDevices, useSelection）
 │       ├── api/         # HTTP 请求封装
 │       ├── layouts/     # 布局（AppLayout）
 │       └── router/      # 路由 + 守卫
@@ -278,4 +300,4 @@ automan/
 
 ---
 
-*最后更新：2026/07/09*
+*最后更新：2026/07/10*

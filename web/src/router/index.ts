@@ -22,8 +22,8 @@ const router = createRouter({
           component: () => import('../views/HomeView.vue'),
         },
         {
-          path: 'canvas',
-          name: 'canvas',
+          path: 'track',
+          name: 'track',
           component: () => import('../views/CanvasView.vue'),
         },
       ],

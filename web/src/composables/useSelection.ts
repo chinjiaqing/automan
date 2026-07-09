@@ -279,7 +279,7 @@ export function useSelection(
   // ── 操作 ──
   async function copyCoords() {
     const coords = displayCoords.value
-    const text = `${coords.x1},${coords.y1},${coords.x2},${coords.y2}`
+    const text = `[${coords.x1},${coords.y1},${coords.x2},${coords.y2}]`
     await navigator.clipboard.writeText(text)
     copied.value = true
     if (copyTimer) clearTimeout(copyTimer)

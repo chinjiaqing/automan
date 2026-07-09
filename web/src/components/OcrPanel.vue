@@ -43,28 +43,49 @@
 
     <!-- 颜色过滤 -->
     <div>
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-xs text-gray-500">颜色过滤</span>
+      <span class="text-xs text-gray-500 block mb-1">颜色过滤</span>
+      <div class="relative">
+        <input
+          v-model="selectedColor"
+          type="text"
+          placeholder="如 red、#FF0000、0,0,255..."
+          class="input-base text-sm pr-7"
+        />
         <button
           v-if="selectedColor"
-          class="text-xs text-brand-600 hover:text-brand-700"
+          class="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 transition-colors"
           @click="selectedColor = ''"
         >
-          清除
+          <i class="pi pi-times text-[10px]" />
         </button>
       </div>
-      <div class="flex flex-wrap gap-1">
+      <div class="flex gap-1.5 mt-1.5">
         <button
-          v-for="c in colorOptions"
-          :key="c.value"
-          class="px-2 py-0.5 text-xs rounded border transition-colors"
-          :class="selectedColor === c.value
-            ? 'border-brand-500 bg-brand-50 text-brand-700'
-            : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
-          @click="selectedColor = selectedColor === c.value ? '' : c.value"
-        >
-          {{ c.label }}
-        </button>
+          class="px-1.5 py-0.5 text-[10px] font-mono rounded border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors"
+          @click="selectedColor = 'white'"
+        >#ffffff</button>
+        <button
+          class="px-1.5 py-0.5 text-[10px] font-mono rounded border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors"
+          @click="selectedColor = 'black'"
+        >#000000</button>
+      </div>
+      <!-- 颜色偏差滑块 -->
+      <div v-if="selectedColor" class="mt-2">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[10px] text-gray-400">颜色偏差</span>
+          <span class="text-[10px] font-mono text-brand-600">{{ colorTolerance }}</span>
+        </div>
+        <input
+          type="range"
+          min="5"
+          max="100"
+          v-model.number="colorTolerance"
+          class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+        />
+        <div class="flex justify-between text-[9px] text-gray-300">
+          <span>精确</span>
+          <span>宽松</span>
+        </div>
       </div>
     </div>
 
@@ -157,21 +178,11 @@ const mode = ref<'words' | 'find'>('words')
 const target = ref('')
 const similarity = ref(80)
 const selectedColor = ref('')
+const colorTolerance = ref(50)
 const loading = ref(false)
 const wordsResult = ref<GetWordsResponse | null>(null)
 const findResult = ref<FindStrResponse | null>(null)
 
-const colorOptions: { label: string; value: OcrColor }[] = [
-  { label: '红', value: 'red' },
-  { label: '橙', value: 'orange' },
-  { label: '黄', value: 'yellow' },
-  { label: '绿', value: 'green' },
-  { label: '蓝', value: 'blue' },
-  { label: '紫', value: 'purple' },
-  { label: '白', value: 'white' },
-  { label: '黑', value: 'black' },
-  { label: '灰', value: 'gray' },
-]
 
 // 切换截图时清空结果
 watch(() => props.screenshot, () => {
@@ -203,6 +214,7 @@ async function handleOcr() {
         image: props.screenshot!.image,
         region,
         color,
+        colorTolerance: colorTolerance.value,
       })
       if (res.success) {
         wordsResult.value = res.data
@@ -217,6 +229,7 @@ async function handleOcr() {
         region,
         similarity: similarity.value / 100,
         color,
+        colorTolerance: colorTolerance.value,
       })
       if (res.success) {
         findResult.value = res.data

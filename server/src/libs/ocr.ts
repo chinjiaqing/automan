@@ -13,7 +13,7 @@ import { logger } from '../core/logger.js'
 // ── 类型定义 ──────────────────────────────────
 
 /** 预设颜色名称 */
-export type OcrColor =
+export type OcrColorPreset =
   | 'red'
   | 'orange'
   | 'yellow'
@@ -24,6 +24,9 @@ export type OcrColor =
   | 'white'
   | 'black'
   | 'gray'
+
+/** 颜色：预设名称 或 任意 hex (#RRGGBB / #RGB) 或 rgb (r,g,b) */
+export type OcrColor = OcrColorPreset | (string & {})
 
 /** OCR 识别到的单个文字块 */
 export interface OcrWord {
@@ -49,6 +52,8 @@ export interface GetWordsOptions {
   region?: [number, number, number, number]
   /** 文字颜色过滤，不传则识别所有颜色 */
   color?: OcrColor
+  /** 颜色偏差 0-100，默认 50。值越大容差越宽 */
+  colorTolerance?: number
 }
 
 /** getWords 结果 */
@@ -77,6 +82,8 @@ export interface FindStrOptions {
   similarity?: number
   /** 文字颜色过滤 */
   color?: OcrColor
+  /** 颜色偏差 0-100，默认 50。值越大容差越宽 */
+  colorTolerance?: number
 }
 
 /** findStr 结果 */
@@ -129,6 +136,7 @@ export async function getWords(options: GetWordsOptions): Promise<GetWordsResult
     image,
     region = [0, 0, 0, 0],
     color,
+    colorTolerance = 50,
   } = options
 
   if (!image) {
@@ -142,6 +150,7 @@ export async function getWords(options: GetWordsOptions): Promise<GetWordsResult
     image,
     region,
     color: color ?? null,
+    colorTolerance,
   })
 
   if (pyResult.error) {
@@ -192,6 +201,7 @@ export async function findStr(options: FindStrOptions): Promise<FindStrResult> {
     region = [0, 0, 0, 0],
     similarity = 0.8,
     color,
+    colorTolerance = 50,
   } = options
 
   if (!image || !target) {
@@ -207,6 +217,7 @@ export async function findStr(options: FindStrOptions): Promise<FindStrResult> {
     region,
     similarity,
     color: color ?? null,
+    colorTolerance,
   })
 
   if (pyResult.error) {

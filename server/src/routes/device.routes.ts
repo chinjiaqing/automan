@@ -16,11 +16,13 @@ import type {
   FindPicRequest,
   GetWordsRequest,
   FindStrRequest,
+  AdbClickRequest,
+  AdbAreaClickRequest,
 } from '@automan/shared/types.js'
 import { DeviceStatus } from '@automan/shared/types.js'
 import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
-import { findPic, getWords, findStr } from '../libs/index.js'
+import { findPic, getWords, findStr, adbClick, adbAreaClick } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
 function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
@@ -266,7 +268,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
     '/api/devices/ocr-words',
     { bodyLimit: 20 * 1024 * 1024 },
     async (request, reply) => {
-      const { image, region, color } = request.body
+      const { image, region, color, colorTolerance } = request.body
       if (!image) {
         return reply.status(400).send({
           success: false,
@@ -276,7 +278,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await getWords({ image, region, color })
+        const result = await getWords({ image, region, color, colorTolerance })
         return { success: true as const, data: result }
       } catch (err) {
         return reply.status(500).send({
@@ -293,7 +295,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
     '/api/devices/ocr-find-str',
     { bodyLimit: 20 * 1024 * 1024 },
     async (request, reply) => {
-      const { image, target, region, similarity, color } = request.body
+      const { image, target, region, similarity, color, colorTolerance } = request.body
       if (!image || !target) {
         return reply.status(400).send({
           success: false,
@@ -303,13 +305,89 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await findStr({ image, target, region, similarity, color })
+        const result = await findStr({ image, target, region, similarity, color, colorTolerance })
         return { success: true as const, data: result }
       } catch (err) {
         return reply.status(500).send({
           success: false,
           code: 'OCR_FIND_STR_FAILED',
           message: err instanceof Error ? err.message : '找字失败',
+        })
+      }
+    },
+  )
+
+  // ── ADB 单点点击 ─────────────────────────
+  app.post<{ Body: AdbClickRequest }>(
+    '/api/devices/click',
+    async (request, reply) => {
+      const { deviceId, point } = request.body
+      if (!deviceId) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'deviceId 为必填',
+        })
+      }
+
+      const device = db.select().from(devices).where(eq(devices.id, deviceId)).get()
+      if (!device) {
+        return reply.status(404).send({
+          success: false,
+          code: 'NOT_FOUND',
+          message: `设备 ${deviceId} 不存在`,
+        })
+      }
+
+      try {
+        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
+        const target = adbService.getTarget(device.instanceIndex)
+        await adbService.connect(adbPath, target)
+        const result = await adbClick(adbPath, target, point)
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'ADB_CLICK_FAILED',
+          message: err instanceof Error ? err.message : '点击失败',
+        })
+      }
+    },
+  )
+
+  // ── ADB 范围随机点击 ─────────────────────
+  app.post<{ Body: AdbAreaClickRequest }>(
+    '/api/devices/area-click',
+    async (request, reply) => {
+      const { deviceId, region } = request.body
+      if (!deviceId) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'deviceId 为必填',
+        })
+      }
+
+      const device = db.select().from(devices).where(eq(devices.id, deviceId)).get()
+      if (!device) {
+        return reply.status(404).send({
+          success: false,
+          code: 'NOT_FOUND',
+          message: `设备 ${deviceId} 不存在`,
+        })
+      }
+
+      try {
+        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
+        const target = adbService.getTarget(device.instanceIndex)
+        await adbService.connect(adbPath, target)
+        const result = await adbAreaClick(adbPath, target, region)
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'ADB_AREA_CLICK_FAILED',
+          message: err instanceof Error ? err.message : '范围点击失败',
         })
       }
     },

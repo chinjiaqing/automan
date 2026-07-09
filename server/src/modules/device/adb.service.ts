@@ -87,7 +87,7 @@ export class AdbService {
       execFile(
         adbPath,
         ['-s', target, 'exec-out', 'screencap', '-p'],
-        { timeout: ADB_SCREENCAP_TIMEOUT, windowsHide: true, encoding: 'buffer' },
+        { timeout: ADB_SCREENCAP_TIMEOUT, maxBuffer: 20 * 1024 * 1024, windowsHide: true, encoding: 'buffer' },
         (err, stdoutBuf) => {
           if (err) {
             logger.error('AdbService', `screencap failed: ${err.message}`)

@@ -12,6 +12,9 @@ import type {
   GetWordsResponse,
   FindStrRequest,
   FindStrResponse,
+  AdbClickRequest,
+  AdbAreaClickRequest,
+  AdbClickResponse,
 } from '@automan/shared/types.js'
 
 export const deviceApi = {
@@ -47,6 +50,14 @@ export const deviceApi = {
   /** OCR 找字 */
   ocrFindStr: (data: FindStrRequest) =>
     api.post<FindStrResponse>('/api/devices/ocr-find-str', data),
+
+  /** ADB 单点点击 */
+  click: (data: AdbClickRequest) =>
+    api.post<AdbClickResponse>('/api/devices/click', data),
+
+  /** ADB 范围随机点击 */
+  areaClick: (data: AdbAreaClickRequest) =>
+    api.post<AdbClickResponse>('/api/devices/area-click', data),
 }
 
 /** 文件系统浏览 */

@@ -55,23 +55,76 @@ def decode_base64_image(b64_string: str) -> np.ndarray:
     return img
 
 
-def apply_color_filter(img: np.ndarray, color: str) -> np.ndarray:
-    """按颜色过滤：保留指定颜色区域的像素，其余设为白色。"""
+def parse_color_to_bgr(color: str):
+    """将颜色字符串解析为 BGR 元组。
+    支持：
+      - 预设名称 (red, blue, ...)
+      - hex (#RRGGBB 或 #RGB)
+      - rgb (r,g,b)
+    """
+    s = color.strip()
+    # hex
+    if s.startswith('#'):
+        h = s.lstrip('#')
+        if len(h) == 3:
+            h = ''.join(c * 2 for c in h)
+        if len(h) != 6:
+            raise ValueError(f"无效的 hex 颜色: {color}")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return (b, g, r)
+    # rgb comma-separated
+    parts = [p.strip() for p in s.split(',')]
+    if len(parts) == 3:
+        r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
+        return (b, g, r)
+    raise ValueError(f"无法解析颜色: {color}")
+
+
+def apply_color_filter(img: np.ndarray, color: str, color_tolerance: int = 50) -> np.ndarray:
+    """按颜色过滤：保留指定颜色区域的像素，其余设为白色。
+    color_tolerance: 0-100，默认 50。映射为 HSV 容差：色相 = tol*0.3，饱和度/明度 = tol*1.2。
+    """
     color_lower = color.lower().strip()
-    if color_lower not in COLOR_PRESETS:
-        raise ValueError(f"不支持的颜色: {color}，可选: {', '.join(COLOR_PRESETS.keys())}")
+    h_tol = max(1, int(color_tolerance * 0.3))
+    sv_tol = max(1, int(color_tolerance * 1.2))
 
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    ranges = COLOR_PRESETS[color_lower]
-
-    if len(ranges) == 4:
-        lower1, upper1, lower2, upper2 = ranges
-        mask1 = cv2.inRange(hsv, np.array(lower1), np.array(upper1))
-        mask2 = cv2.inRange(hsv, np.array(lower2), np.array(upper2))
-        mask = cv2.bitwise_or(mask1, mask2)
+    # preset name
+    if color_lower in COLOR_PRESETS:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        ranges = COLOR_PRESETS[color_lower]
+        # scale preset ranges by tolerance factor (default 50 => factor 1.0)
+        factor = color_tolerance / 50.0
+        if len(ranges) == 4:
+            l1, u1, l2, u2 = ranges
+            def scale_range(lo, hi):
+                mid = [(lo[i] + hi[i]) / 2 for i in range(3)]
+                half = [(hi[i] - lo[i]) / 2 * factor for i in range(3)]
+                s_lo = [max(0 if i == 0 else 0, int(mid[i] - half[i])) for i in range(3)]
+                s_hi = [min(180 if i == 0 else 255, int(mid[i] + half[i])) for i in range(3)]
+                return tuple(s_lo), tuple(s_hi)
+            sl1, sh1 = scale_range(l1, u1)
+            sl2, sh2 = scale_range(l2, u2)
+            mask1 = cv2.inRange(hsv, np.array(sl1), np.array(sh1))
+            mask2 = cv2.inRange(hsv, np.array(sl2), np.array(sh2))
+            mask = cv2.bitwise_or(mask1, mask2)
+        else:
+            lo, hi = ranges[0], ranges[1]
+            mid = [(lo[i] + hi[i]) / 2 for i in range(3)]
+            half = [(hi[i] - lo[i]) / 2 * factor for i in range(3)]
+            s_lo = tuple(max(0, int(mid[i] - half[i])) for i in range(3))
+            s_hi = tuple(min(180 if i == 0 else 255, int(mid[i] + half[i])) for i in range(3))
+            mask = cv2.inRange(hsv, np.array(s_lo), np.array(s_hi))
     else:
-        lower, upper = ranges[0], ranges[1]
-        mask = cv2.inRange(hsv, np.array(lower), np.array(upper))
+        # arbitrary hex / rgb -> convert to HSV, build tolerance range
+        bgr = parse_color_to_bgr(color)
+        pixel = np.uint8([[list(bgr)]])
+        hsv_pixel = cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)
+        h, s, v = int(hsv_pixel[0][0][0]), int(hsv_pixel[0][0][1]), int(hsv_pixel[0][0][2])
+        # tolerance derived from color_tolerance parameter
+        lower = np.array([max(0, h - h_tol), max(0, s - sv_tol), max(0, v - sv_tol)])
+        upper = np.array([min(180, h + h_tol), min(255, s + sv_tol), min(255, v + sv_tol)])
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, lower, upper)
 
     result = np.full_like(img, 255)
     result[mask > 0] = img[mask > 0]
@@ -79,7 +132,8 @@ def apply_color_filter(img: np.ndarray, color: str) -> np.ndarray:
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
-def get_words(image_b64: str, region: list = None, color: str = None) -> dict:
+def get_words(image_b64: str, region: list = None, color: str = None,
+             color_tolerance: int = 50) -> dict:
     """OCR 文字识别"""
     t0 = time.perf_counter()
     src = decode_base64_image(image_b64)
@@ -96,7 +150,7 @@ def get_words(image_b64: str, region: list = None, color: str = None) -> dict:
             offset_x, offset_y = x1, y1
 
     if color:
-        src = apply_color_filter(src, color)
+        src = apply_color_filter(src, color, color_tolerance)
 
     ocr = get_ocr()
     result, elapse = ocr(src)
@@ -165,9 +219,10 @@ def sliding_window_match(text: str, target: str) -> float:
 
 
 def find_str(image_b64: str, target: str, region: list = None,
-             similarity: float = 0.8, color: str = None) -> dict:
+             similarity: float = 0.8, color: str = None,
+             color_tolerance: int = 50) -> dict:
     """找字：在截图中查找指定文字"""
-    ocr_result = get_words(image_b64, region, color)
+    ocr_result = get_words(image_b64, region, color, color_tolerance)
     all_words = ocr_result["words"]
 
     matches = []
@@ -194,19 +249,20 @@ def handle_command(input_data: dict) -> dict:
     image_b64 = input_data.get("image", "")
     region = input_data.get("region", [0, 0, 0, 0])
     color = input_data.get("color")
+    color_tolerance = input_data.get("colorTolerance", 50)
 
     if not image_b64:
         return {"error": "image 为必填"}
 
     try:
         if action == "getWords":
-            return get_words(image_b64, region, color)
+            return get_words(image_b64, region, color, color_tolerance)
         elif action == "findStr":
             target = input_data.get("target", "")
             similarity = input_data.get("similarity", 0.8)
             if not target:
                 return {"error": "target 为必填"}
-            return find_str(image_b64, target, region, similarity, color)
+            return find_str(image_b64, target, region, similarity, color, color_tolerance)
         else:
             return {"error": f"未知 action: {action}，支持: getWords, findStr"}
     except Exception as e:

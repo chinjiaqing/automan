@@ -52,7 +52,7 @@
       </div>
 
       <!-- Tab: 找图 / OCR -->
-      <div class="flex-1 flex flex-col">
+      <div class="flex flex-col">
         <div class="flex border-b border-gray-200 mb-3">
           <button
             v-for="tab in tabs"
@@ -75,15 +75,104 @@
           @update:results="onFindResults"
         />
         <OcrPanel
-          v-else
+          v-if="activeTab === 'ocr'"
           :screenshot="screenshot"
           :selection="selection"
         />
       </div>
+
+      <!-- 点击操作区 -->
+      <div class="border-t border-gray-200 pt-3 flex flex-col gap-2">
+        <div class="flex border border-gray-200 rounded overflow-hidden">
+          <button
+            v-for="ct in clickTabs"
+            :key="ct.key"
+            class="flex-1 py-1.5 text-xs text-center transition-colors"
+            :class="activeClickTab === ct.key
+              ? 'bg-brand-500 text-white'
+              : 'bg-white text-gray-600 hover:bg-gray-50'"
+            @click="activeClickTab = ct.key"
+          >
+            <i :class="`pi ${ct.icon} mr-1`" />
+            {{ ct.label }}
+          </button>
+        </div>
+
+        <!-- 单点点击 -->
+        <div v-if="activeClickTab === 'click'" class="flex items-center gap-2">
+          <input
+            v-model="clickPoint"
+            type="text"
+            placeholder="[x, y]"
+            class="input-base text-sm flex-1 font-mono"
+          />
+          <button
+            class="btn-primary px-3 py-1.5 text-xs flex items-center gap-1"
+            :disabled="!selectedDeviceId || clickLoading"
+            @click="handleClick"
+          >
+            <i :class="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'" />
+            点击
+          </button>
+        </div>
+
+        <!-- 范围点击 -->
+        <div v-if="activeClickTab === 'area'" class="flex items-center gap-2">
+          <input
+            v-model="clickArea"
+            type="text"
+            placeholder="[x1, y1, x2, y2]"
+            class="input-base text-sm flex-1 font-mono"
+          />
+          <button
+            class="btn-primary px-3 py-1.5 text-xs flex items-center gap-1"
+            :disabled="!selectedDeviceId || clickLoading"
+            @click="handleAreaClick"
+          >
+            <i :class="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'" />
+            点击
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 右侧截屏区 -->
-    <div class="flex-1 flex items-center justify-center bg-gray-100 overflow-auto p-4">
+    <div class="flex-1 flex flex-col bg-gray-100 overflow-hidden relative">
+      <!-- 工具栏 -->
+      <div class="h-[52px] flex-shrink-0 bg-white border-b border-gray-200 flex items-center justify-center px-4 gap-4">
+        <!-- 取色工具组 -->
+        <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5">
+          <div
+            class="w-6 h-6 rounded border border-gray-300 cursor-pointer transition-transform hover:scale-110"
+            :style="{ backgroundColor: pickedColor }"
+            title="点击取色"
+            @click="pickColor"
+          />
+          <span class="text-[11px] font-mono text-gray-500 select-all">{{ pickedColor }}</span>
+          <button
+            class="w-6 h-6 flex items-center justify-center rounded transition-colors"
+            :class="colorCopied ? 'text-green-500' : 'hover:bg-gray-200 text-gray-400'"
+            title="复制颜色值"
+            @click="copyColor"
+          >
+            <i :class="colorCopied ? 'pi pi-check' : 'pi pi-copy'" class="text-[11px]" />
+          </button>
+          <div class="w-px h-4 bg-gray-200 mx-0.5" />
+          <button
+            class="w-7 h-7 flex items-center justify-center rounded-md transition-all cursor-crosshair"
+            :class="eyedropperActive ? 'bg-brand-500 text-white scale-110' : 'hover:bg-gray-200 text-gray-500'"
+            title="屏幕取色"
+            @click="pickColor"
+          >
+            <i class="pi pi-palette text-xs" />
+          </button>
+        </div>
+
+        <!-- 后续工具组占位：用同样的 .tool-group 样式，组间加 gap-4 即可 -->
+      </div>
+
+      <!-- 截图展示区 -->
+      <div class="flex-1 flex items-center justify-center overflow-auto p-4">
       <div v-if="!screenshot" class="text-center text-gray-400">
         <i class="pi pi-image text-6xl mb-3 block" />
         <p>选择设备并点击截屏开始</p>
@@ -101,7 +190,7 @@
         <!-- 截图 -->
         <img
           :src="screenshot.image"
-          :style="{ maxWidth: '100%', maxHeight: 'calc(100vh - 120px)' }"
+          :style="{ maxWidth: '100%', maxHeight: 'calc(100vh - 172px)' }"
           class="block pointer-events-none"
           style="user-select: none; -webkit-user-drag: none;"
           draggable="false"
@@ -164,6 +253,15 @@
           </span>
         </div>
       </div>
+      </div>
+
+      <!-- Toast -->
+      <Transition name="toast">
+        <div
+          v-if="toastMsg"
+          class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50"
+        >{{ toastMsg }}</div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -185,6 +283,44 @@ const capturing = ref(false)
 const canvasContainer = ref<HTMLElement>()
 const imgDisplaySize = ref({ width: 0, height: 0 })
 
+// ── 取色工具 ──
+const pickedColor = ref('#ffffff')
+const colorCopied = ref(false)
+const eyedropperActive = ref(false)
+const toastMsg = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(msg: string) {
+  toastMsg.value = msg
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMsg.value = '' }, 1500)
+}
+
+async function pickColor() {
+  if (!('EyeDropper' in window)) {
+    showToast('当前浏览器不支持取色器')
+    return
+  }
+  eyedropperActive.value = true
+  try {
+    const dropper = new (window as any).EyeDropper()
+    const result = await dropper.open()
+    pickedColor.value = result.sRGBHex
+  } catch {
+    // user cancelled
+  } finally {
+    eyedropperActive.value = false
+  }
+}
+
+function copyColor() {
+  navigator.clipboard.writeText(pickedColor.value).then(() => {
+    colorCopied.value = true
+    showToast('复制成功')
+    setTimeout(() => { colorCopied.value = false }, 1000)
+  })
+}
+
 // ── 框选（composable） ──
 const {
   dragMode, selectionBox, selection, copied,
@@ -199,6 +335,70 @@ const tabs = [
   { key: 'ocr', label: 'OCR', icon: 'pi-file-edit' },
 ]
 const activeTab = ref('find')
+
+// ── 点击操作 ──
+const clickTabs = [
+  { key: 'click', label: '点击', icon: 'pi-bullseye' },
+  { key: 'area', label: '范围点击', icon: 'pi-stop' },
+]
+const activeClickTab = ref('click')
+const clickPoint = ref('[0, 0]')
+const clickArea = ref('[0, 0, 0, 0]')
+const clickLoading = ref(false)
+
+function parseCoord(input: string, expected: number): number[] | null {
+  const nums = input.replace(/[\[\]\s]/g, '').split(',').map(Number)
+  if (nums.length !== expected || nums.some(isNaN)) return null
+  return nums
+}
+
+async function handleClick() {
+  const coords = parseCoord(clickPoint.value, 2)
+  if (!coords) {
+    showToast('坐标格式错误，请输入 [x, y]')
+    return
+  }
+  clickLoading.value = true
+  try {
+    const res = await deviceApi.click({
+      deviceId: selectedDeviceId.value,
+      point: [coords[0], coords[1]],
+    })
+    if (res.success) {
+      showToast(`点击成功 (${res.data.x}, ${res.data.y})`)
+    } else {
+      showToast('message' in res ? res.message : '点击失败')
+    }
+  } catch {
+    showToast('点击请求失败')
+  } finally {
+    clickLoading.value = false
+  }
+}
+
+async function handleAreaClick() {
+  const coords = parseCoord(clickArea.value, 4)
+  if (!coords) {
+    showToast('坐标格式错误，请输入 [x1, y1, x2, y2]')
+    return
+  }
+  clickLoading.value = true
+  try {
+    const res = await deviceApi.areaClick({
+      deviceId: selectedDeviceId.value,
+      region: [coords[0], coords[1], coords[2], coords[3]],
+    })
+    if (res.success) {
+      showToast(`范围点击成功 (${res.data.x}, ${res.data.y})`)
+    } else {
+      showToast('message' in res ? res.message : '范围点击失败')
+    }
+  } catch {
+    showToast('范围点击请求失败')
+  } finally {
+    clickLoading.value = false
+  }
+}
 
 // ── 找图结果覆盖层 ──
 const findData = ref<{ matches: FindPicMatch[]; templateSize: { width: number; height: number } }>({
@@ -255,3 +455,15 @@ function onImageLoad(e: Event) {
   imgDisplaySize.value = { width: img.clientWidth, height: img.clientHeight }
 }
 </script>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+</style>

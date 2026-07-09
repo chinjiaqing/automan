@@ -282,6 +282,8 @@ export interface GetWordsRequest {
   image: string
   region?: [number, number, number, number]
   color?: OcrColor
+  /** 颜色偏差 0-100，默认 50。值越大容差越宽 */
+  colorTolerance?: number
 }
 
 /** getWords 响应 */
@@ -302,11 +304,36 @@ export interface FindStrRequest {
   region?: [number, number, number, number]
   similarity?: number
   color?: OcrColor
+  /** 颜色偏差 0-100，默认 50。值越大容差越宽 */
+  colorTolerance?: number
 }
 
 /** findStr 响应 */
 export interface FindStrResponse {
   matches: OcrMatch[]
   allWords: string[]
+  elapsed: number
+}
+
+// ─────────────────────────────────────────
+// ADB 点击
+// ─────────────────────────────────────────
+
+/** 单点点击请求 */
+export interface AdbClickRequest {
+  deviceId: string
+  point: [number, number]
+}
+
+/** 范围随机点击请求 */
+export interface AdbAreaClickRequest {
+  deviceId: string
+  region: [number, number, number, number]
+}
+
+/** 点击响应 */
+export interface AdbClickResponse {
+  x: number
+  y: number
   elapsed: number
 }

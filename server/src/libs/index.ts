@@ -28,6 +28,10 @@ export type {
   OcrColor,
 } from './ocr.js'
 
+// ── ADB 点击 API ─────────────────────────────
+export { adbClick, adbAreaClick } from './adb-click.js'
+export type { AdbClickResult } from './adb-click.js'
+
 // ── Python 工具（供其他业务扩展使用） ─────────
 export { runPythonScript, getPythonPath, getScriptPath, PythonWorker } from './python-helper.js'
 export type { PyOutput } from './python-helper.js'
