@@ -26,6 +26,11 @@ const router = createRouter({
           name: 'track',
           component: () => import('../views/CanvasView.vue'),
         },
+        {
+          path: 'flow',
+          name: 'flow',
+          component: () => import('../views/FlowView.vue'),
+        },
       ],
     },
   ],

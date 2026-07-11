@@ -22,6 +22,13 @@ export enum WsMessageType {
 
   // 系统级
   ERROR = 'error',
+
+  // 工作流执行
+  WORKFLOW_STARTED = 'workflow:started',
+  WORKFLOW_STOPPED = 'workflow:stopped',
+  WORKFLOW_STATUS = 'workflow:status',
+  WORKFLOW_VISUAL = 'workflow:visual',
+  DEVICE_SCREENSHOT = 'device:screenshot',
 }
 
 /** WS 消息基础结构 */
@@ -370,4 +377,180 @@ export interface AdbClickResponse {
   x: number
   y: number
   elapsed: number
+}
+
+// ─────────────────────────────────────────
+// Workflow 工作流
+// ─────────────────────────────────────────
+
+/** 字段 schema（渲染右侧配置面板表单） */
+export interface FieldSchema {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select' | 'slider' | 'image-upload' | 'coord-input' | 'data-ref' | 'data-input' | 'data-source'
+  default?: unknown
+  options?: string[]
+  min?: number
+  max?: number
+  placeholder?: string
+  showWhen?: Record<string, string>
+}
+
+/** 输出端口 */
+export interface OutputPort {
+  key: string
+  label: string
+  dataType: 'string' | 'number' | 'boolean' | 'coord'
+}
+
+/** 输入端口 */
+export interface InputPort {
+  key: string
+  label: string
+  dataType: 'string' | 'number' | 'boolean' | 'coord'
+  optional?: boolean
+}
+
+/** 节点类型定义 */
+export interface NodeTypeDefinition {
+  type: string
+  category: 'flow' | 'action' | 'data'
+  label: string
+  icon: string
+  configSchema: FieldSchema[]
+  outputs: OutputPort[]
+  inputs: InputPort[]
+  exitCount: number
+}
+
+/** 工作流节点 */
+export interface WorkflowNode {
+  id: string
+  type: string
+  label: string
+  position: { x: number; y: number }
+  config: Record<string, unknown>
+}
+
+/** 工作流边 */
+export interface WorkflowEdge {
+  id: string
+  source: string
+  target: string
+  sourceHandle?: string
+}
+
+/** 工作流 */
+export interface Workflow {
+  id: string
+  name: string
+  deviceId?: string
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** 创建工作流请求 */
+export interface CreateWorkflowRequest {
+  name: string
+  deviceId?: string
+}
+
+/** 保存工作流请求 */
+export interface SaveWorkflowRequest {
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+}
+
+// ─────────────────────────────────────────
+// 工作流运行
+// ─────────────────────────────────────────
+
+/** 工作流执行状态 */
+export enum WorkflowRunState {
+  IDLE = 'idle',
+  RUNNING = 'running',
+  ERROR = 'error',
+  STOPPED = 'stopped',
+}
+
+/** 启动工作流请求 */
+export interface RunWorkflowRequest {
+  deviceId: string
+  workflowId: string
+  /** 截图间隔毫秒，默认 2000 */
+  screenshotInterval?: number
+}
+
+/** 停止工作流请求 */
+export interface StopWorkflowRequest {
+  runId: string
+}
+
+/** 工作流运行实例信息 */
+export interface WorkflowRunInfo {
+  runId: string
+  workflowId: string
+  deviceId: string
+  state: WorkflowRunState
+  createdAt: number
+  /** 已执行次数 */
+  executionCount: number
+  /** 上次截图时间 */
+  lastScreenshotAt?: number
+}
+
+/** 工作流状态变更推送 */
+export interface WorkflowStatusPayload {
+  runId: string
+  workflowId: string
+  deviceId: string
+  state: WorkflowRunState
+  executionCount: number
+  /** 当前执行的节点类型（可选） */
+  currentNodeType?: string
+}
+
+// ─────────────────────────────────────────
+// 工作流可视化注解
+// ─────────────────────────────────────────
+
+/** 注解类型枚举 */
+export type VisualAnnotationType = 'bbox' | 'click' | 'area' | 'text'
+
+/** 通用视觉注解 */
+export interface VisualAnnotation {
+  type: VisualAnnotationType
+  nodeId: string
+  label: string
+  /** 原始坐标空间下的数据 */
+  data: Record<string, unknown>
+  /** 工作流 ID（用于区分多工作流叠加） */
+  workflowId: string
+  workflowName: string
+}
+
+/** 设备截图推送负载 */
+export interface DeviceScreenshotPayload {
+  deviceId: string
+  image: string // data:image/png;base64,...
+  width: number
+  height: number
+  originalWidth: number
+  originalHeight: number
+  timestamp: number
+}
+
+/** 工作流可视化推送负载 */
+export interface WorkflowVisualPayload {
+  deviceId: string
+  screenshot: string // data:image/png;base64,...
+  screenshotWidth: number
+  screenshotHeight: number
+  originalWidth: number
+  originalHeight: number
+  annotations: VisualAnnotation[]
+  executionCount: number
+  timestamp: number
 }

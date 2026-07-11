@@ -22,6 +22,12 @@ export enum EventBusEvent {
   TASK_STOPPED = 'task:stopped',
   /** 系统错误 */
   SYSTEM_ERROR = 'system:error',
+  /** 截图分发 */
+  SCREENSHOT_READY = 'screenshot:ready',
+  /** 工作流状态变更 */
+  WORKFLOW_STATE = 'workflow:state',
+  /** 工作流可视化结果 */
+  WORKFLOW_VISUAL = 'workflow:visual',
 }
 
 /** Actor 日志事件数据结构 */

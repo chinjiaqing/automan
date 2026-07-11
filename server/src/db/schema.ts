@@ -24,3 +24,20 @@ export const devices = sqliteTable(
 // ── 类型推导 ─────────────────────────────────
 export type DeviceRow = typeof devices.$inferSelect
 export type NewDeviceRow = typeof devices.$inferInsert
+
+// ── workflows 表 ──────────────────────────
+export const workflows = sqliteTable(
+  'workflows',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    deviceId: text('device_id'),
+    nodesJson: text('nodes_json').notNull().default('[]'),
+    edgesJson: text('edges_json').notNull().default('[]'),
+    createdAt: integer('created_at', { mode: 'number' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  },
+)
+
+export type WorkflowRow = typeof workflows.$inferSelect
+export type NewWorkflowRow = typeof workflows.$inferInsert

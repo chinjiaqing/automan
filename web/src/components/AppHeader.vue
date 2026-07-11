@@ -50,6 +50,7 @@ const { disconnect } = useWebSocket()
 const navItems = [
   { name: 'home', label: '首页', icon: 'pi-home' },
   { name: 'track', label: '开发板', icon: 'pi-image' },
+  { name: 'flow', label: '编排', icon: 'pi-sitemap' },
 ]
 
 function isActive(name: string) {

@@ -1,3 +1,204 @@
+# Automan — 低代码自动化工作流引擎
+
+> 基于截图驱动的可视化工作流编辑器 + 自动化执行引擎  
+> 支持多设备并发、实时看板、节点编排、WebSocket 实时通信
+
+---
+
+## 项目概述
+
+Automan 是一个面向自动化任务（游戏养号、UI 自动化、RPA 流程）的全栈系统：
+
+- **可视化编排**：拖拽节点构建工作流（识图、OCR、点击、条件判断、循环等）
+- **截图驱动**：设备每 2 秒自动截屏，工作流以截图为输入自动执行
+- **实时看板**：截图 + 执行结果叠加标注（识别框、点击波纹、文字区域）
+- **多设备并发**：每个设备独立运行多工作流，busy 锁防并发
+
+---
+
+## 技术栈
+
+| 层 | 技术 |
+|---|------|
+| **前端** | Vue 3 + TypeScript + PrimeVue + UnoCSS + Vue Flow |
+| **后端** | Fastify + TypeScript + Drizzle ORM |
+| **数据库** | SQLite (better-sqlite3) |
+| **图像处理** | sharp (压缩) + OpenCV/Python (识图/OCR) |
+| **通信** | WebSocket (实时) + REST API |
+| **设备控制** | ADB (雷电模拟器) |
+| **构建** | pnpm workspace (monorepo) + Vite |
+
+---
+
+## 项目结构
+
+```
+automan/
+├── server/                   # 后端服务
+│   └── src/
+│       ├── app.ts            # Fastify 应用入口 + EventBus → WS 桥接
+│       ├── server.ts         # 启动文件
+│       ├── core/
+│       │   ├── event-bus.ts  # 全局事件总线
+│       │   └── logger.ts     # 日志封装
+│       ├── db/
+│       │   ├── schema.ts     # Drizzle Schema (devices, workflows)
+│       │   ├── index.ts      # 数据库连接
+│       │   └── migrate.ts    # 自动迁移
+│       ├── modules/
+│       │   ├── actor/        # Actor 基类 + 管理器
+│       │   ├── device/       # ADB 服务封装
+│       │   ├── task/         # 任务 Actor 系统
+│       │   ├── ws/           # WebSocket 网关 + 分发
+│       │   └── workflow/     # 工作流引擎核心
+│       │       ├── engine.ts           # 节点执行引擎
+│       │       ├── workflow.actor.ts   # 工作流 Actor
+│       │       ├── screenshot.dispatcher.ts  # 截图调度器 (sharp 压缩)
+│       │       ├── service.ts          # 工作流运行服务
+│       │       └── refResolver.ts      # 变量引用解析
+│       ├── libs/             # Python 脚本封装
+│       │   ├── find-pic-pro.ts/py    # SIFT 找图
+│       │   ├── find-pic.ts/py        # 模板匹配找图
+│       │   ├── ocr.ts/py             # OCR 识字/找字
+│       │   └── adb-click.ts          # ADB 点击
+│       ├── routes/           # REST API 路由
+│       └── plugins/          # Fastify 插件
+│
+├── web/                      # 前端应用
+│   └── src/
+│       ├── views/
+│       │   ├── HomeView.vue    # 首页：三栏布局 (设备/工作流/日志+看板)
+│       │   ├── FlowView.vue    # 工作流编辑器 (纯可视化画布)
+│       │   ├── CanvasView.vue  # 画板：截图框选 + 找图/OCR 调试
+│       │   └── LoginView.vue   # 登录页
+│       ├── components/
+│       │   ├── ExecutionViewer.vue   # 实时看板 (截图+注解叠加)
+│       │   ├── LogPanel.vue          # 日志面板
+│       │   ├── WorkflowListPanel.vue # 工作流列表
+│       │   ├── FindPicPanel.vue      # 找图调试面板
+│       │   └── flow/                 # 工作流节点组件
+│       ├── composables/
+│       │   ├── useWorkflowRun.ts  # 工作流运行状态 (模块级单例)
+│       │   ├── useDevices.ts      # 设备管理
+│       │   └── useWebSocket.ts    # WebSocket 封装
+│       └── flow/               # 节点类型定义
+│
+└── shared/                   # 共享类型 + 工具
+    └── src/
+        └── types.ts          # 全局类型定义
+```
+
+---
+
+## 核心架构
+
+### 双层循环执行模型
+
+```
+外层（系统级）：每 2s 截屏 → ScreenshotDispatcher (sharp 720px 压缩) → EventBus
+                                                            ↓
+内层（工作流级）：WorkflowActor 收到截图 → Engine 逐节点执行 → busy 锁防并发
+```
+
+### 坐标空间统一
+
+所有用户可见的坐标均基于**原始设备分辨率**：
+
+- 画板框选 → 原始坐标
+- 工作流参数 (region/click) → 原始坐标
+- 引擎内部 → 自动缩放 region 到压缩空间，结果缩放回原始空间
+- 看板标注 → `displayW / originalWidth` 缩放渲染
+
+### WebSocket 实时通信
+
+```
+Engine 注解 → WorkflowActor.emitVisual() → EventBus → app.ts → WS 广播 → 前端
+ScreenshotDispatcher → SCREENSHOT_READY → app.ts → WS 广播 → 前端 (底图实时更新)
+```
+
+---
+
+## 工作流节点
+
+| 类型 | 节点 | 说明 |
+|------|------|------|
+| 流程 | start / end | 开始/结束 |
+| 流程 | condition | 条件判断 (支持 `{{nodeId.key}}` 引用) |
+| 流程 | loop | 循环 (back edge + 自动标记) |
+| 动作 | findPic | SIFT/多尺度模板匹配 |
+| 动作 | ocrWords | OCR 全图识字 |
+| 动作 | ocrFindStr | OCR 找指定文字 |
+| 动作 | click | 坐标点击 |
+| 动作 | areaClick | 区域随机点击 |
+| 动作 | delay | 延时等待 |
+| 数据 | variable | 变量 (local/session/input 三种作用域) |
+| 数据 | counter | 计数器 |
+| 数据 | math | 数学运算 |
+
+---
+
+## 首页三栏布局
+
+```
+┌─ 设备列表 ─┬─ 工作流列表 ─┬─ 操作按钮 (通栏) ──────────┐
+│  设备 A    │  ☑ 工作流1   │ [开始] [停止]  已运行 00:05 │
+│  设备 B ●  │  ☐ 工作流2   ├─ 实时看板 ─────────────────┤
+│            │  ☑ 工作流3   │  [截图 + 识别框/点击波纹]    │
+│            │              ├─ 日志滚动区 ────────────────┤
+│            │              │  07-10 02:00 [info] ...      │
+└────────────┴──────────────┴──────────────────────────────┘
+```
+
+---
+
+## 开发
+
+```bash
+# 安装依赖
+pnpm install
+
+# 启动后端 (开发模式)
+cd server && pnpm dev
+
+# 启动前端 (开发模式)
+cd web && pnpm dev
+```
+
+### 环境变量
+
+- `LOG_LEVEL`：日志级别 (默认 info)
+- `PORT`：后端端口 (默认 3000)
+
+### 数据库
+
+SQLite，文件位于 `F:\workspace\data\automan.db`（项目根目录上层 `data/`）。  
+使用 Drizzle ORM，自动迁移。
+
+---
+
+## 已实现功能
+
+- [x] Actor 模型 + EventBus 事件驱动
+- [x] 低代码工作流编辑器 (Vue Flow)
+- [x] 截图驱动执行引擎 (双层循环)
+- [x] SIFT + 多尺度模板匹配 (Python/OpenCV)
+- [x] OCR 识字/找字 (Python)
+- [x] 截图压缩 (sharp, 720px max width)
+- [x] 实时看板 (截图 + 注解叠加)
+- [x] 设备管理 (CRUD + 雷电模拟器集成)
+- [x] 三栏布局首页
+- [x] 画板调试工具 (框选坐标 + 找图/OCR 测试)
+- [x] WebSocket 实时日志/状态推送
+- [x] 三层变量作用域 (local/session/input)
+- [x] 坐标空间统一 (原始分辨率基准)
+
+## 待实现
+
+- [ ] 工作流持久化运行 (断点续跑)
+- [ ] 模板图片独立文件存储 (当前 base64 内嵌 JSON)
+- [ ] 定时触发 (cron)
+- [ ] 多用户/权限管理
+- [ ] 脚本热更新
 # 🤖 Automan（奥特曼）自动化任务系统
 
 > 一个基于 **Actor 模型** 的自动化养号 / 游戏任务执行引擎

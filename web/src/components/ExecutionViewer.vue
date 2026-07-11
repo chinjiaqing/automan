@@ -1,0 +1,294 @@
+<template>
+  <div class="exec-viewer flex flex-col bg-gray-100">
+    <!-- 截图 + 注解叠加层 -->
+    <div v-if="screenshot" ref="canvasRef" class="exec-viewer__canvas relative select-none mx-auto">
+      <img
+        :src="screenshot.image"
+        class="block w-full"
+        style="user-select: none; -webkit-user-drag: none;"
+        draggable="false"
+      />
+
+      <!-- 注解叠加 -->
+      <template v-if="annotations">
+        <template v-for="(ann, ai) in annotations.annotations" :key="ai">
+        <!-- bbox: 识图匹配框 -->
+        <template v-if="ann.type === 'bbox'">
+          <div
+            v-for="(m, mi) in (ann.data.matches as any[])"
+            :key="`bbox-${ai}-${mi}`"
+            class="exec-ann exec-ann--bbox"
+            :style="bboxStyle(m)"
+          >
+            <span class="exec-ann__label">{{ ann.label }} #{{ mi + 1 }} {{ (m.confidence * 100).toFixed(0) }}%</span>
+          </div>
+        </template>
+
+        <!-- text: OCR 文字匹配框 -->
+        <template v-else-if="ann.type === 'text'">
+          <div
+            v-for="(m, mi) in (ann.data.matches as any[])"
+            :key="`text-${ai}-${mi}`"
+            class="exec-ann exec-ann--text"
+            :style="textStyle(m)"
+          >
+            <span class="exec-ann__label">{{ m.text }}</span>
+          </div>
+        </template>
+
+        <!-- click: 点击波纹 -->
+        <template v-else-if="ann.type === 'click'">
+          <div
+            class="exec-ann exec-ann--click"
+            :style="pointStyle(ann.data.x as number, ann.data.y as number)"
+          >
+            <span class="exec-ann__ripple" />
+            <span class="exec-ann__ripple exec-ann__ripple--delay" />
+          </div>
+        </template>
+
+        <!-- area: 范围点击 -->
+        <template v-else-if="ann.type === 'area'">
+          <div
+            class="exec-ann exec-ann--area"
+            :style="areaStyle(ann.data.region as number[])"
+          >
+            <span class="exec-ann__label">{{ ann.label }}</span>
+          </div>
+          <div
+            class="exec-ann exec-ann--click"
+            :style="pointStyle(ann.data.clickX as number, ann.data.clickY as number)"
+          >
+            <span class="exec-ann__ripple" />
+          </div>
+        </template>
+      </template>
+      </template>
+    </div>
+
+    <!-- 无截图占位 -->
+    <div v-else class="exec-viewer__placeholder">
+      <div class="text-center text-gray-400 text-xs">
+        <i class="pi pi-image text-2xl mb-1 block" />
+        等待设备截图...
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue'
+import type { VisualAnnotation } from '@automan/shared/types.js'
+
+interface ScreenshotInfo {
+  image: string
+  width: number
+  height: number
+  originalWidth: number
+  originalHeight: number
+}
+
+interface AnnotationInfo {
+  annotations: VisualAnnotation[]
+  executionCount: number
+}
+
+const props = defineProps<{
+  screenshot: ScreenshotInfo | null
+  annotations: AnnotationInfo | null
+}>()
+
+/** 画布容器引用 */
+const canvasRef = ref<HTMLElement | null>(null)
+
+/** 图片显示尺寸 */
+const displayW = ref(0)
+const displayH = ref(0)
+
+/** ResizeObserver 跟踪容器宽度变化 */
+let ro: ResizeObserver | null = null
+
+onMounted(() => {
+  ro = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const w = entry.contentRect.width
+      if (w > 0 && props.screenshot) {
+        const aspect = props.screenshot.height / props.screenshot.width
+        let h = w * aspect
+        if (h > 360) h = 360
+        displayW.value = w
+        displayH.value = h
+      }
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  ro?.disconnect()
+  ro = null
+})
+
+/** 截图变化时观察新容器 */
+watch(canvasRef, (el) => {
+  if (el && ro) {
+    ro.disconnect()
+    ro.observe(el)
+  }
+})
+
+/** 缩放因子：显示像素 / 原始分辨率像素（注解坐标基于原始分辨率） */
+const sx = computed(() => (displayW.value && props.screenshot ? displayW.value / props.screenshot.originalWidth : 1))
+const sy = computed(() => (displayH.value && props.screenshot ? displayH.value / props.screenshot.originalHeight : 1))
+
+/** 默认 bbox 尺寸（匹配点周围扩展） */
+const BOX_HALF = 20
+
+function bboxStyle(m: { x: number; y: number }): CSSProperties {
+  const x = m.x * sx.value
+  const y = m.y * sy.value
+  return {
+    left: `${x - BOX_HALF}px`,
+    top: `${y - BOX_HALF}px`,
+    width: `${BOX_HALF * 2}px`,
+    height: `${BOX_HALF * 2}px`,
+  }
+}
+
+function textStyle(m: { x: number; y: number; w: number; h: number }): CSSProperties {
+  return {
+    left: `${m.x * sx.value}px`,
+    top: `${m.y * sy.value}px`,
+    width: `${(m.w || BOX_HALF * 2) * sx.value}px`,
+    height: `${(m.h || BOX_HALF * 2) * sy.value}px`,
+  }
+}
+
+function pointStyle(x: number, y: number): CSSProperties {
+  const px = x * sx.value
+  const py = y * sy.value
+  return {
+    left: `${px}px`,
+    top: `${py}px`,
+  }
+}
+
+function areaStyle(region: number[]): CSSProperties {
+  const [x1, y1, x2, y2] = region
+  return {
+    left: `${x1 * sx.value}px`,
+    top: `${y1 * sy.value}px`,
+    width: `${(x2 - x1) * sx.value}px`,
+    height: `${(y2 - y1) * sy.value}px`,
+  }
+}
+</script>
+
+<style scoped>
+.exec-viewer {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.exec-viewer__canvas {
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.exec-viewer__canvas img {
+  max-height: 360px;
+  object-fit: contain;
+}
+
+.exec-viewer__placeholder {
+  height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+}
+
+/* ── 注解通用 ── */
+.exec-ann {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* bbox: 绿色匹配框 */
+.exec-ann--bbox {
+  border: 2px solid #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 2px;
+}
+
+/* text: 蓝色文字区域 */
+.exec-ann--text {
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 2px;
+}
+
+/* area: 橙色范围框 */
+.exec-ann--area {
+  border: 2px dashed #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 3px;
+}
+
+/* click: 波纹中心点 */
+.exec-ann--click {
+  width: 0;
+  height: 0;
+  z-index: 6;
+}
+
+.exec-ann__ripple {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  margin-left: -16px;
+  margin-top: -16px;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  animation: ripple 1.2s ease-out infinite;
+}
+
+.exec-ann__ripple--delay {
+  animation-delay: 0.4s;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* 标签 */
+.exec-ann__label {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  color: white;
+}
+
+.exec-ann--bbox .exec-ann__label {
+  background: #22c55e;
+}
+
+.exec-ann--text .exec-ann__label {
+  background: #3b82f6;
+}
+
+.exec-ann--area .exec-ann__label {
+  background: #f59e0b;
+}
+</style>

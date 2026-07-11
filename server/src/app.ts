@@ -15,6 +15,7 @@ import loggerPlugin from './plugins/logger.js'
 // 服务层
 import { ActorManager } from './modules/actor/actor.manager.js'
 import { TaskService } from './modules/task/task.service.js'
+import { WorkflowService } from './modules/workflow/service.js'
 import { WsMessageType } from '@automan/shared/types.js'
 
 // 数据库
@@ -25,6 +26,7 @@ import { runMigrations } from './db/migrate.js'
 import { deviceRoutes } from './routes/device.routes.js'
 import { taskRoutes } from './routes/task.routes.js'
 import { filesystemRoutes } from './routes/filesystem.routes.js'
+import { workflowRoutes } from './routes/workflow.routes.js'
 
 export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -60,6 +62,7 @@ export async function createApp(): Promise<FastifyInstance> {
   // ── 4. 初始化服务层 ────────────────────────
   const actorManager = new ActorManager()
   const taskService = new TaskService(actorManager)
+  const workflowService = new WorkflowService()
 
   // 将服务层注入 Dispatcher（延迟绑定）
   app.wsDispatcher.setServices(actorManager, taskService)
@@ -78,6 +81,30 @@ export async function createApp(): Promise<FastifyInstance> {
   eventBus.on(EventBusEvent.ACTOR_STATE_CHANGE, (data) => {
     app.wsGateway.broadcast({
       type: WsMessageType.ACTOR_STATE,
+      payload: data,
+      timestamp: Date.now(),
+    })
+  })
+
+  eventBus.on(EventBusEvent.WORKFLOW_STATE, (data) => {
+    app.wsGateway.broadcast({
+      type: WsMessageType.WORKFLOW_STATUS,
+      payload: data,
+      timestamp: Date.now(),
+    })
+  })
+
+  eventBus.on(EventBusEvent.WORKFLOW_VISUAL, (data) => {
+    app.wsGateway.broadcast({
+      type: WsMessageType.WORKFLOW_VISUAL,
+      payload: data,
+      timestamp: Date.now(),
+    })
+  })
+
+  eventBus.on(EventBusEvent.SCREENSHOT_READY, (data) => {
+    app.wsGateway.broadcast({
+      type: WsMessageType.DEVICE_SCREENSHOT,
       payload: data,
       timestamp: Date.now(),
     })
@@ -102,6 +129,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await taskRoutes(app, taskService)
   await deviceRoutes(app)
   await filesystemRoutes(app)
+  await workflowRoutes(app, workflowService)
 
   // ── 7. WebSocket 路由 ──────────────────────
   app.get('/ws', { websocket: true }, (socket, req) => {
@@ -133,6 +161,7 @@ export async function createApp(): Promise<FastifyInstance> {
   app.addHook('onClose', async () => {
     app.log.info('Shutting down — destroying all actors...')
     await actorManager.destroyAll()
+    await workflowService.stopAll()
     sqlite.close()
     app.log.info('Database connection closed')
   })
