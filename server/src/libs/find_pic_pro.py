@@ -71,31 +71,38 @@ def sift_match(src: np.ndarray, tpl: np.ndarray,
     tpl_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
     src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
 
-    # RANSAC 过滤 + 单应性矩阵
-    H, mask = cv2.findHomography(tpl_pts, src_pts, cv2.RANSAC, 5.0)
+    # RANSAC 粗筛 + 单应性矩阵（阈值 2.0px 保证定位精度）
+    H, mask = cv2.findHomography(tpl_pts, src_pts, cv2.RANSAC, 2.0)
 
     if H is None or mask is None:
         return []
 
-    inliers = mask.ravel().tolist()
-    inlier_count = sum(inliers)
+    inlier_mask = mask.ravel().astype(bool)
+    inlier_count = int(inlier_mask.sum())
 
     if inlier_count < min_features:
         return []
 
-    # 用单应性矩阵变换模板四角到源图坐标
+    # 用 inlier 子集重新拟合 H，最小二乘法精化（消除噪声点影响）
+    tpl_inliers = tpl_pts[inlier_mask]
+    src_inliers = src_pts[inlier_mask]
+    H_refined, _ = cv2.findHomography(tpl_inliers, src_inliers, method=0)
+    if H_refined is not None:
+        H = H_refined
+
+    # 用精化后的 H 变换模板四角到源图坐标
     th, tw = tpl.shape[:2]
     corners = np.float32([[0, 0], [tw, 0], [tw, th], [0, th]]).reshape(-1, 1, 2)
     transformed = cv2.perspectiveTransform(corners, H)
 
-    # 计算匹配区域的中心点
-    cx = int(np.mean(transformed[:, 0, 0]))
-    cy = int(np.mean(transformed[:, 0, 1]))
+    # 返回 bounding box 左上角（与 findPic 行为一致）
+    top_left_x = round(float(np.min(transformed[:, 0, 0])))
+    top_left_y = round(float(np.min(transformed[:, 0, 1])))
 
     # 置信度 = inlier 比率 × 匹配质量
     confidence = min(1.0, (inlier_count / len(good_matches)) * 0.7 + (inlier_count / max(len(kp1), 1)) * 0.3)
 
-    return [(cx, cy, round(confidence, 4))]
+    return [(top_left_x, top_left_y, round(confidence, 4))]
 
 
 # ── 多尺度模板匹配（兜底） ──────────────────────────
@@ -132,10 +139,8 @@ def multiscale_match(src: np.ndarray, tpl: np.ndarray,
 
         for pt_y, pt_x in zip(*locations):
             conf = float(result[pt_y, pt_x])
-            # 中心点坐标
-            cx = int(pt_x + new_w / 2)
-            cy = int(pt_y + new_h / 2)
-            best_matches.append((cx, cy, conf, scale))
+            # 左上角坐标（matchTemplate 原生返回的就是左上角）
+            best_matches.append((int(pt_x), int(pt_y), conf, scale))
 
     if not best_matches:
         return []
@@ -146,11 +151,11 @@ def multiscale_match(src: np.ndarray, tpl: np.ndarray,
     # NMS 去重
     min_dist = max(tw_orig, th_orig) * 0.4
     deduped = []
-    for cx, cy, conf, scale in best_matches:
+    for tx, ty, conf, scale in best_matches:
         if len(deduped) >= max_results:
             break
-        if not any(abs(d[0] - cx) < min_dist and abs(d[1] - cy) < min_dist for d in deduped):
-            deduped.append((cx, cy, conf))
+        if not any(abs(d[0] - tx) < min_dist and abs(d[1] - ty) < min_dist for d in deduped):
+            deduped.append((tx, ty, conf))
 
     return deduped
 
