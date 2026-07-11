@@ -8,6 +8,8 @@ import type {
   ScreenshotResponse,
   FindPicRequest,
   FindPicResponse,
+  FindPicProRequest,
+  FindPicProResponse,
   GetWordsRequest,
   GetWordsResponse,
   FindStrRequest,
@@ -42,6 +44,10 @@ export const deviceApi = {
   /** 找图（模板匹配） */
   findPic: (data: FindPicRequest) =>
     api.post<FindPicResponse>('/api/devices/find-pic', data),
+
+  /** 找图 Pro（SIFT + FLANN + RANSAC，支持缩放/旋转/光照变化） */
+  findPicPro: (data: FindPicProRequest) =>
+    api.post<FindPicProResponse>('/api/devices/find-pic-pro', data),
 
   /** OCR 识字 */
   ocrWords: (data: GetWordsRequest) =>

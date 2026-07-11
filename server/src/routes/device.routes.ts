@@ -14,6 +14,7 @@ import type {
   ListInstancesRequest,
   ScreenshotRequest,
   FindPicRequest,
+  FindPicProRequest,
   GetWordsRequest,
   FindStrRequest,
   AdbClickRequest,
@@ -22,7 +23,7 @@ import type {
 import { DeviceStatus } from '@automan/shared/types.js'
 import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
-import { findPic, getWords, findStr, adbClick, adbAreaClick } from '../libs/index.js'
+import { findPic, findPicPro, getWords, findStr, adbClick, adbAreaClick } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
 function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
@@ -258,6 +259,41 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
           success: false,
           code: 'FIND_PIC_FAILED',
           message: err instanceof Error ? err.message : '找图失败',
+        })
+      }
+    },
+  )
+
+  // ── 找图 Pro（SIFT + FLANN + RANSAC）────────────────────
+  app.post<{ Body: FindPicProRequest }>(
+    '/api/devices/find-pic-pro',
+    { bodyLimit: 20 * 1024 * 1024 },
+    async (request, reply) => {
+      const { image, template, threshold, maxResults, region, scales, minFeatures } = request.body
+      if (!image || !template) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'image 和 template 均为必填',
+        })
+      }
+
+      try {
+        const result = await findPicPro({
+          image,
+          template,
+          threshold,
+          maxResults,
+          region,
+          scales,
+          minFeatures,
+        })
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'FIND_PIC_PRO_FAILED',
+          message: err instanceof Error ? err.message : '找图 Pro 失败',
         })
       }
     },

@@ -250,6 +250,40 @@ export interface FindPicResponse {
   elapsed: number
 }
 
+// ─────────────────────────────────────────────
+// 找图 Pro（SIFT + FLANN + RANSAC）
+// ─────────────────────────────────────────────
+
+/** 找图 Pro 请求 */
+export interface FindPicProRequest {
+  image: string
+  template: string
+  threshold?: number
+  maxResults?: number
+  region?: [number, number, number, number]
+  /** 多尺度缩放列表（兗底时使用） */
+  scales?: number[]
+  /** SIFT 最少特征点数，默认 4 */
+  minFeatures?: number
+}
+
+/** 找图 Pro 单个匹配结果 */
+export interface FindPicProMatch {
+  x: number
+  y: number
+  confidence: number
+  /** 匹配方法：sift | multiscale */
+  method: string
+}
+
+/** 找图 Pro 响应 */
+export interface FindPicProResponse {
+  matches: FindPicProMatch[]
+  elapsed: number
+  /** 实际使用的匹配方法 */
+  method: string
+}
+
 // ─────────────────────────────────────────
 // OCR（文字识别）
 // ─────────────────────────────────────────
