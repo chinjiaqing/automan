@@ -268,7 +268,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { ScreenshotResponse, FindPicMatch } from '@automan/shared/types.js'
+import type { ScreenshotResponse, FindPicProMatch } from '@automan/shared/types.js'
 import { deviceApi } from '../api/device.js'
 import { useDevices } from '../composables/useDevices.js'
 import { useSelection, CORNER_HANDLES, EDGE_HANDLES } from '../composables/useSelection.js'
@@ -401,7 +401,7 @@ async function handleAreaClick() {
 }
 
 // ── 找图结果覆盖层 ──
-const findData = ref<{ matches: FindPicMatch[]; templateSize: { width: number; height: number } }>({
+const findData = ref<{ matches: FindPicProMatch[]; templateSize: { width: number; height: number } }>({
   matches: [],
   templateSize: { width: 0, height: 0 },
 })
@@ -419,7 +419,7 @@ const matchOverlays = computed(() => {
   }))
 })
 
-function onFindResults(payload: { matches: FindPicMatch[]; templateSize: { width: number; height: number } }) {
+function onFindResults(payload: { matches: FindPicProMatch[]; templateSize: { width: number; height: number } }) {
   findData.value = payload
 }
 

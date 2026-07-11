@@ -55,7 +55,7 @@
         class="text-xs bg-gray-50 px-2 py-1 rounded cursor-pointer hover:bg-brand-50 transition-colors"
         @click="emit('highlight', r)"
       >
-        #{{ i + 1 }}: ({{ r.x }}, {{ r.y }}) 置信度 {{ r.confidence }}
+        #{{ i + 1 }}: ({{ r.x }}, {{ r.y }}) 置信度 {{ r.confidence }} <span class="text-brand-500">[{{ r.method }}]</span>
       </div>
     </div>
     <div v-else-if="findDone" class="text-xs text-gray-400 text-center py-2">
@@ -69,7 +69,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { ScreenshotResponse, FindPicMatch } from '@automan/shared/types.js'
+import type { ScreenshotResponse, FindPicProMatch } from '@automan/shared/types.js'
 import type { Selection } from '../composables/useSelection.js'
 import { deviceApi } from '../api/device.js'
 
@@ -80,9 +80,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   /** 匹配结果更新（父组件用于渲染高亮覆盖层） */
-  'update:results': [payload: { matches: FindPicMatch[]; templateSize: { width: number; height: number } }]
+  'update:results': [payload: { matches: FindPicProMatch[]; templateSize: { width: number; height: number } }]
   /** 点击某个匹配结果 */
-  highlight: [match: FindPicMatch]
+  highlight: [match: FindPicProMatch]
 }>()
 
 const fileInput = ref<HTMLInputElement>()
@@ -91,7 +91,7 @@ const similarity = ref(80)
 const finding = ref(false)
 const findDone = ref(false)
 const findElapsed = ref(0)
-const findResults = ref<FindPicMatch[]>([])
+const findResults = ref<FindPicProMatch[]>([])
 const templateSize = ref({ width: 0, height: 0 })
 
 // 结果变化时通知父组件
@@ -141,7 +141,7 @@ async function handleFindPic() {
     const region: [number, number, number, number] = props.selection
       ? [props.selection.x1, props.selection.y1, props.selection.x2, props.selection.y2]
       : [0, 0, 0, 0]
-    const res = await deviceApi.findPic({
+    const res = await deviceApi.findPicPro({
       image: props.screenshot.image,
       template: templateImage.value,
       threshold: similarity.value / 100,
