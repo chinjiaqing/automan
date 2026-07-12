@@ -1,84 +1,133 @@
 <template>
   <div class="flow-view">
-    <!-- 左侧节点面板 -->
-    <NodePalette />
-
-    <!-- 中间画布 -->
-    <div class="flow-canvas" @drop="onDrop" @dragover.prevent>
-      <!-- 顶部工具栏 -->
-      <div class="flow-toolbar">
-        <select
-          v-if="workflowList.length > 0"
-          v-model="currentWorkflowId"
-          class="flow-toolbar__select"
-          @change="loadWorkflow(currentWorkflowId)"
+    <!-- 左侧脚本列表 -->
+    <aside class="flow-sidebar">
+      <div class="flow-sidebar__header">
+        <span class="text-sm font-semibold text-gray-700">脚本列表</span>
+        <Button size="small" icon="pi pi-plus" label="新建" @click="handleCreate" />
+      </div>
+      <nav class="flex-1 overflow-y-auto px-2 py-2">
+        <div v-if="workflowList.length === 0" class="text-xs text-gray-400 text-center py-8">
+          暂无脚本
+        </div>
+        <div
+          v-for="wf in workflowList"
+          :key="wf.id"
+          class="flow-sidebar__item"
+          :class="{ 'is-active': currentWorkflowId === wf.id }"
+          @click="selectWorkflow(wf.id)"
         >
-          <option v-for="w in workflowList" :key="w.id" :value="w.id">{{ w.name }}</option>
-        </select>
-        <button class="btn-ghost text-xs" @click="handleCreate">
-          <i class="pi pi-plus mr-1" />新建
-        </button>
-        <button class="btn-ghost text-xs" :disabled="!hasChanges" @click="handleSave">
-          <i class="pi pi-save mr-1" />保存{{ hasChanges ? ' *' : '' }}
-        </button>
-        <button
-          class="btn-ghost text-xs text-red-600"
-          :disabled="!currentWorkflowId"
-          @click="handleDelete"
-        >
-          <i class="pi pi-trash mr-1" />删除
-        </button>
+          <span class="text-sm truncate">{{ wf.name }}</span>
+        </div>
+      </nav>
+    </aside>
 
-        <span v-if="currentWorkflowId" class="text-xs text-gray-400 ml-2">
-          ID: {{ currentWorkflowId }}
-        </span>
+    <!-- 中间区域：有选中时显示画布，无选中时显示占位 -->
+    <template v-if="currentWorkflowId">
+      <!-- 节点面板 -->
+      <NodePalette />
+
+      <!-- 画布 -->
+      <div class="flow-canvas" @drop="onDrop" @dragover.prevent>
+        <!-- 顶部工具栏 -->
+        <div class="flow-toolbar">
+          <InputText
+            class="flow-toolbar__name"
+            :value="currentWorkflowName"
+            @input="onNameInput"
+            placeholder="工作流名称"
+            size="small"
+          />
+          <span v-if="currentWorkflowId" class="text-xs text-gray-400 select-all">
+            ID: {{ currentWorkflowId }}
+          </span>
+          <div class="flex-1" />
+          <Button size="small" severity="secondary" text icon="pi pi-save" :label="hasChanges ? '保存 *' : '保存'" :disabled="!hasChanges" @click="handleSave" />
+          <Button size="small" severity="danger" text icon="pi pi-trash" label="删除" @click="handleDelete" />
+        </div>
+
+        <!-- Vue Flow 画布 -->
+        <VueFlow
+          v-model:nodes="nodes"
+          v-model:edges="edges"
+          :node-types="nodeTypes"
+          :default-edge-options="defaultEdgeOpts"
+          :fit-view-on-init="true"
+          :snap-to-grid="true"
+          :snap-grid="[16, 16]"
+          :delete-key-code="['Delete', 'Backspace']"
+          class="flow-vue-flow"
+          @node-click="onNodeClick"
+          @pane-click="onPaneClick"
+          @nodes-change="markChanged"
+          @edges-change="markChanged"
+          @connect="onConnect"
+        >
+          <Background :gap="16" />
+          <Controls />
+        </VueFlow>
       </div>
 
-      <!-- Vue Flow 画布 -->
-      <VueFlow
-        v-model:nodes="nodes"
-        v-model:edges="edges"
-        :node-types="nodeTypes"
-        :default-edge-options="defaultEdgeOpts"
-        :fit-view-on-init="true"
-        :snap-to-grid="true"
-        :snap-grid="[16, 16]"
-        :delete-key-code="['Delete', 'Backspace']"
-        class="flow-vue-flow"
-        @node-click="onNodeClick"
-        @pane-click="onPaneClick"
-        @nodes-change="markChanged"
-        @edges-change="markChanged"
-        @connect="onConnect"
-      >
-        <Background :gap="16" />
-        <Controls />
-      </VueFlow>
+      <!-- 右侧配置面板 -->
+      <ConfigPanel
+        v-if="selectedNode"
+        :node-type="selectedNode.type"
+        :node-id="selectedNode.id"
+        :node-label="selectedNode.label"
+        :config="selectedNode.config as Record<string, unknown>"
+        :upstream-nodes="upstreamNodes"
+        :data-nodes="dataNodes"
+        @update:config="onConfigUpdate"
+        @update:label="onLabelUpdate"
+      />
+      <aside v-else class="config-panel-placeholder">
+        <div class="flex flex-col items-center justify-center h-full text-gray-400 w-[280px]">
+          <i class="pi pi-arrow-left text-2xl mb-2" />
+          <span class="text-sm">选择节点以配置</span>
+        </div>
+      </aside>
+    </template>
+
+    <!-- 无选中：空占位 -->
+    <div v-else class="flow-empty">
+      <i class="pi pi-file-edit text-4xl text-gray-300 mb-3" />
+      <span class="text-sm text-gray-400">选择或新建脚本来开始编辑</span>
     </div>
 
-    <!-- 右侧配置面板 -->
-    <ConfigPanel
-      v-if="selectedNode"
-      :node-type="selectedNode.type"
-      :node-id="selectedNode.id"
-      :node-label="selectedNode.label"
-      :config="selectedNode.config as Record<string, unknown>"
-      :upstream-nodes="upstreamNodes"
-      :data-nodes="dataNodes"
-      @update:config="onConfigUpdate"
-      @update:label="onLabelUpdate"
-    />
-    <aside v-else class="config-panel-placeholder">
-      <div class="flex flex-col items-center justify-center h-full text-gray-400 w-[280px]">
-        <i class="pi pi-arrow-left text-2xl mb-2" />
-        <span class="text-sm">选择节点以配置</span>
+    <!-- 新建脚本弹窗 -->
+    <Dialog v-model:visible="createDialogVisible" header="新建脚本" :modal="true" :style="{ width: '360px' }">
+      <div class="mb-4">
+        <label class="block text-sm text-gray-600 mb-1.5">脚本名称</label>
+        <InputText
+          class="w-full"
+          v-model="createName"
+          placeholder="请输入脚本名称"
+          @keydown.enter="confirmCreate"
+          size="small"
+        />
       </div>
-    </aside>
+      <template #footer>
+        <Button severity="secondary" text label="取消" @click="createDialogVisible = false" />
+        <Button label="确定" :disabled="!createName.trim()" @click="confirmCreate" />
+      </template>
+    </Dialog>
+
+    <!-- 删除确认弹窗 -->
+    <Dialog v-model:visible="deleteDialogVisible" header="确认删除" :modal="true" :style="{ width: '360px' }">
+      <p class="text-sm text-gray-600 mb-4">确定要删除脚本「{{ deleteTargetName }}」吗？此操作不可撤销。</p>
+      <template #footer>
+        <Button severity="secondary" text label="取消" @click="deleteDialogVisible = false" />
+        <Button severity="danger" label="删除" @click="confirmDelete" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, markRaw, onMounted } from 'vue'
+import Dialog from 'primevue/dialog'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import { VueFlow, useVueFlow, type Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -127,14 +176,22 @@ const nodes = ref<any[]>([])
 const edges = ref<any[]>([])
 const workflowList = ref<Workflow[]>([])
 const currentWorkflowId = ref('')
+const currentWorkflowName = ref('')
 const hasChanges = ref(false)
 const selectedNode = ref<WfNode | null>(null)
+
+// ── 新建弹窗 ──
+const createDialogVisible = ref(false)
+const createName = ref('')
+
+// ── 删除弹窗 ──
+const deleteDialogVisible = ref(false)
+const deleteTargetName = ref('')
 
 // ── 计算属性 ─────────────────────────────────────
 /** 选中节点的上游节点（在拓扑序中位于其前面的节点） */
 const upstreamNodes = computed(() => {
   if (!selectedNode.value) return []
-  // 简化：返回除自身和 end 之外的所有节点
   return nodes.value
     .filter((n) => n.id !== selectedNode.value!.id && n.type !== 'end')
     .map((n) => ({ id: n.id, label: n.label ?? n.data?.label, type: n.type }))
@@ -162,11 +219,13 @@ async function loadWorkflowList() {
   const res = await workflowApi.list()
   if (res.success) {
     workflowList.value = res.data
-    if (res.data.length > 0 && !currentWorkflowId.value) {
-      currentWorkflowId.value = res.data[0].id
-      await loadWorkflow(res.data[0].id)
-    }
   }
+}
+
+/** 从列表选中一个工作流 */
+async function selectWorkflow(id: string) {
+  if (currentWorkflowId.value === id) return
+  await loadWorkflow(id)
 }
 
 async function loadWorkflow(id: string) {
@@ -174,6 +233,7 @@ async function loadWorkflow(id: string) {
   if (!res.success) return
   const wf = res.data
   currentWorkflowId.value = wf.id
+  currentWorkflowName.value = wf.name
 
   // 将 WorkflowNode[] 转为 Vue Flow 节点
   nodes.value = wf.nodes.map((n) => toFlowNode(n))
@@ -201,7 +261,6 @@ function toFlowNode(n: WfNode): any {
       config: n.config ?? {},
       selected: false,
     },
-    // start/end 节点不可删除
     deletable: n.type !== 'start' && n.type !== 'end',
     draggable: true,
   }
@@ -227,13 +286,10 @@ function toWfEdge(e: any) {
 }
 
 function onNodeClick({ node }: { node: any }) {
-  // 更新选中状态
   nodes.value.forEach((n) => {
     if (n.data) n.data.selected = false
   })
   if (node.data) node.data.selected = true
-
-  // 找到对应的 WfNode
   selectedNode.value = toWfNode(node)
 }
 
@@ -260,6 +316,12 @@ function markChanged() {
   hasChanges.value = true
 }
 
+/** 名称输入 */
+function onNameInput(e: Event) {
+  currentWorkflowName.value = (e.target as HTMLInputElement).value
+  hasChanges.value = true
+}
+
 // ── 拖入添加节点 ────────────────────────────────
 function onDrop(event: DragEvent) {
   const nodeType = event.dataTransfer?.getData('application/automan-node-type')
@@ -268,11 +330,10 @@ function onDrop(event: DragEvent) {
   const def = getNodeTypeDef(nodeType)
   if (!def) return
 
-  // 计算画布坐标
   const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const position = project({
     x: event.clientX - bounds.left,
-    y: event.clientY - bounds.top - 40, // 减去工具栏高度
+    y: event.clientY - bounds.top - 40,
   })
 
   const id = `${nodeType}_${Date.now()}`
@@ -283,7 +344,6 @@ function onDrop(event: DragEvent) {
     }
   }
 
-  // 数据节点自动生成 data_xxxxx
   if (nodeType === 'variable' && !defaultConfig.name) {
     defaultConfig.name = generateDataId()
   }
@@ -330,13 +390,18 @@ function onLabelUpdate(value: string) {
 }
 
 // ── 工作流 CRUD ───────────────────────────────────
-async function handleCreate() {
-  const name = prompt('工作流名称：')
+function handleCreate() {
+  createName.value = ''
+  createDialogVisible.value = true
+}
+
+async function confirmCreate() {
+  const name = createName.value.trim()
   if (!name) return
+  createDialogVisible.value = false
   const res = await workflowApi.create({ name })
   if (res.success) {
     await loadWorkflowList()
-    currentWorkflowId.value = res.data.id
     await loadWorkflow(res.data.id)
   }
 }
@@ -345,18 +410,31 @@ async function handleSave() {
   if (!currentWorkflowId.value) return
   const wfNodes = nodes.value.map((n) => toWfNode(n))
   const wfEdges = edges.value.map((e) => toWfEdge(e))
-  const res = await workflowApi.save(currentWorkflowId.value, { nodes: wfNodes, edges: wfEdges })
+  const res = await workflowApi.save(currentWorkflowId.value, {
+    name: currentWorkflowName.value,
+    nodes: wfNodes,
+    edges: wfEdges,
+  })
   if (res.success) {
     hasChanges.value = false
+    // 更新列表中的名称
+    const item = workflowList.value.find((w) => w.id === currentWorkflowId.value)
+    if (item) item.name = res.data.name
   }
 }
 
 async function handleDelete() {
   if (!currentWorkflowId.value) return
-  if (!confirm('确定删除该工作流？')) return
+  deleteTargetName.value = currentWorkflowName.value
+  deleteDialogVisible.value = true
+}
+
+async function confirmDelete() {
+  deleteDialogVisible.value = false
   const res = await workflowApi.remove(currentWorkflowId.value)
   if (res.success) {
     currentWorkflowId.value = ''
+    currentWorkflowName.value = ''
     nodes.value = []
     edges.value = []
     selectedNode.value = null
@@ -381,6 +459,43 @@ function generateDataId(): string {
   overflow: hidden;
 }
 
+/* ── 左侧脚本列表 ── */
+.flow-sidebar {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.flow-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.flow-sidebar__item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+
+.flow-sidebar__item:hover {
+  background: #f3f4f6;
+}
+
+.flow-sidebar__item.is-active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* ── 画布区域 ── */
 .flow-canvas {
   flex: 1;
   display: flex;
@@ -392,24 +507,46 @@ function generateDataId(): string {
 .flow-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 8px 12px;
   background: white;
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
 }
 
-.flow-toolbar__select {
+.flow-toolbar__name {
   padding: 4px 8px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   outline: none;
-  min-width: 140px;
+  min-width: 120px;
+  max-width: 240px;
+  transition: border-color 0.15s;
+}
+
+.flow-toolbar__name:hover {
+  border-color: #9ca3af;
+}
+
+.flow-toolbar__name:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .flow-vue-flow {
   flex: 1;
+  background: #fafafa;
+}
+
+/* ── 空占位 ── */
+.flow-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   background: #fafafa;
 }
 

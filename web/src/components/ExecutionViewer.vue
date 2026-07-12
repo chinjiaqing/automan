@@ -12,13 +12,13 @@
       <!-- 注解叠加 -->
       <template v-if="annotations">
         <template v-for="(ann, ai) in annotations.annotations" :key="ai">
-        <!-- bbox: 识图匹配框 -->
+        <!-- bbox: 识图匹配框（用模板图片实际尺寸） -->
         <template v-if="ann.type === 'bbox'">
           <div
             v-for="(m, mi) in (ann.data.matches as any[])"
             :key="`bbox-${ai}-${mi}`"
             class="exec-ann exec-ann--bbox"
-            :style="bboxStyle(m)"
+            :style="bboxStyle(m, ann.data.templateW as number, ann.data.templateH as number)"
           >
             <span class="exec-ann__label">{{ ann.label }} #{{ mi + 1 }} {{ (m.confidence * 100).toFixed(0) }}%</span>
           </div>
@@ -136,21 +136,21 @@ watch(canvasRef, (el) => {
   }
 })
 
-/** 缩放因子：显示像素 / 原始分辨率像素（注解坐标基于原始分辨率） */
-const sx = computed(() => (displayW.value && props.screenshot ? displayW.value / props.screenshot.originalWidth : 1))
-const sy = computed(() => (displayH.value && props.screenshot ? displayH.value / props.screenshot.originalHeight : 1))
+/** 缩放因子：显示像素 / 截图像素（注解坐标基于截图尺寸 = 标准分辨率） */
+const sx = computed(() => (displayW.value && props.screenshot ? displayW.value / props.screenshot.width : 1))
+const sy = computed(() => (displayH.value && props.screenshot ? displayH.value / props.screenshot.height : 1))
 
-/** 默认 bbox 尺寸（匹配点周围扩展） */
-const BOX_HALF = 20
-
-function bboxStyle(m: { x: number; y: number }): CSSProperties {
+/** bbox 尺寸：用模板图片实际尺寸，无则回退固定 40px */
+function bboxStyle(m: { x: number; y: number }, templateW?: number, templateH?: number): CSSProperties {
+  const w = (templateW ?? 40) * sx.value
+  const h = (templateH ?? 40) * sy.value
   const x = m.x * sx.value
   const y = m.y * sy.value
   return {
-    left: `${x - BOX_HALF}px`,
-    top: `${y - BOX_HALF}px`,
-    width: `${BOX_HALF * 2}px`,
-    height: `${BOX_HALF * 2}px`,
+    left: `${x}px`,
+    top: `${y}px`,
+    width: `${w}px`,
+    height: `${h}px`,
   }
 }
 
@@ -158,8 +158,8 @@ function textStyle(m: { x: number; y: number; w: number; h: number }): CSSProper
   return {
     left: `${m.x * sx.value}px`,
     top: `${m.y * sy.value}px`,
-    width: `${(m.w || BOX_HALF * 2) * sx.value}px`,
-    height: `${(m.h || BOX_HALF * 2) * sy.value}px`,
+    width: `${(m.w || 40) * sx.value}px`,
+    height: `${(m.h || 40) * sy.value}px`,
   }
 }
 

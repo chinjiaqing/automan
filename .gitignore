@@ -56,6 +56,7 @@ pnpm-debug.log*
 # ── 截图/缓存 ─────────────────────────────────
 *.png
 !docs/**/*.png
+!web/public/**/*.png
 
 # ── 分发运行时（start.bat 自动下载，不提交） ──
 .bin/

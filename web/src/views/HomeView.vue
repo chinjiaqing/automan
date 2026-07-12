@@ -4,12 +4,7 @@
     <aside class="w-60 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
       <div class="px-4 pt-4 pb-2 flex items-center justify-between">
         <span class="text-sm font-semibold text-gray-500 uppercase tracking-wider">设备列表</span>
-        <button
-          class="text-xs text-brand-600 hover:text-brand-700 transition-colors cursor-pointer flex items-center gap-0.5"
-          @click="openCreate"
-        >
-          <i class="pi pi-plus text-xs" />添加
-        </button>
+        <Button text size="small" icon="pi pi-plus" label="添加" @click="openCreate" />
       </div>
 
       <nav class="flex-1 overflow-y-auto px-2">
@@ -32,12 +27,8 @@
           />
           <span class="flex-1 text-sm truncate">{{ device.name }}</span>
           <div class="hidden group-hover:flex items-center gap-0.5">
-            <button class="p-1 rounded hover:bg-gray-200 transition-colors" title="重命名" @click.stop="openEdit(device)">
-              <i class="pi pi-pencil text-xs text-gray-500" />
-            </button>
-            <button class="p-1 rounded hover:bg-red-100 transition-colors" title="删除" @click.stop="confirmDelete(device)">
-              <i class="pi pi-trash text-xs text-red-500" />
-            </button>
+            <Button text rounded severity="secondary" size="small" icon="pi pi-pencil" title="重命名" @click.stop="openEdit(device)" />
+            <Button text rounded severity="danger" size="small" icon="pi pi-trash" title="删除" @click.stop="confirmDelete(device)" />
           </div>
         </div>
       </nav>
@@ -84,8 +75,8 @@
         确定要删除设备「{{ deleteTarget?.name }}」吗？此操作不可撤销。
       </p>
       <template #footer>
-        <button class="btn-ghost" @click="deleteVisible = false">取消</button>
-        <button class="btn-danger" @click="handleDelete">删除</button>
+        <Button severity="secondary" text label="取消" @click="deleteVisible = false" />
+        <Button severity="danger" label="删除" @click="handleDelete" />
       </template>
     </Dialog>
   </div>
@@ -94,6 +85,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
+import Button from 'primevue/button'
 import type { DeviceInfo } from '@automan/shared/types.js'
 import { useDevices } from '../composables/useDevices.js'
 import { useWorkflowRun } from '../composables/useWorkflowRun.js'
@@ -122,6 +114,10 @@ const deviceAnnotations = computed(() => {
 
 onMounted(async () => {
   await fetchDevices()
+  // 默认选中第一个设备
+  if (devices.value.length > 0 && !selectedId.value) {
+    selectedId.value = devices.value[0].id
+  }
 })
 
 // ── 新增/编辑弹窗 ──

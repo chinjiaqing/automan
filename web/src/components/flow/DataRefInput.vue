@@ -1,20 +1,21 @@
 <template>
   <div class="data-ref-input">
-    <input
-      class="config-panel__input"
-      type="text"
+    <InputText
+      class="w-full"
+      size="small"
       :value="value"
       :placeholder="placeholder"
       @input="onInput($event)"
     />
-    <button
+    <Button
       v-if="upstreamNodes.length > 0"
-      class="data-ref-input__btn"
+      text
+      severity="secondary"
+      size="small"
+      icon="pi pi-at"
       title="引用上游输出"
       @click="showDropdown = !showDropdown"
-    >
-      <i class="pi pi-at text-xs" />
-    </button>
+    />
     <div v-if="showDropdown" class="data-ref-input__dropdown">
       <div
         v-for="node in upstreamNodes"
@@ -38,6 +39,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import { getNodeTypeDef } from '../../flow/nodeTypes.js'
 import { makeRef } from '../../flow/refResolver.js'
 
@@ -79,25 +82,6 @@ function insertRef(nodeId: string, outputKey: string) {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.data-ref-input__btn {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #d1d5db;
-  background: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280;
-}
-
-.data-ref-input__btn:hover {
-  background: #f3f4f6;
-  color: #3b82f6;
 }
 
 .data-ref-input__dropdown {

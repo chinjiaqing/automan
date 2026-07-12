@@ -9,33 +9,39 @@
 
       <span class="flex-1" />
 
-      <button
+      <Button
         v-if="!isRunning"
-        class="btn-ghost text-xs text-green-600"
+        text
+        severity="success"
+        size="small"
+        icon="pi pi-play"
+        label="开始"
         :disabled="checkedCount === 0"
         @click="$emit('start')"
-      >
-        <i class="pi pi-play mr-1" />开始
-      </button>
-      <button
+      />
+      <Button
         v-else
-        class="btn-ghost text-xs text-orange-500"
+        text
+        severity="warn"
+        size="small"
+        icon="pi pi-stop"
+        label="停止"
         @click="$emit('stop')"
-      >
-        <i class="pi pi-stop mr-1" />停止
-      </button>
+      />
 
       <span class="text-xs text-gray-500 font-mono">
         <i class="pi pi-clock mr-1" />{{ formatElapsed(elapsed) }}
       </span>
 
-      <button
-        class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+      <Button
+        text
+        rounded
+        severity="secondary"
+        size="small"
+        icon="pi pi-trash"
         title="清空日志"
         @click="$emit('clear')"
-      >
-        <i class="pi pi-trash text-xs" />
-      </button>
+      />
     </div>
 
     <!-- 插槽：看板等外部内容 -->
@@ -64,6 +70,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import Button from 'primevue/button'
 import type { LogEntry } from '../composables/useWorkflowRun.js'
 
 const props = defineProps<{

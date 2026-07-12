@@ -3,9 +3,7 @@
     <div class="data-source-select__display">
       <span v-if="value" class="data-source-select__tag">{{ value }}</span>
       <span v-else class="text-gray-400 text-xs">自动生成或选择已有</span>
-      <button class="data-source-select__toggle" @click="showDropdown = !showDropdown">
-        <i :class="showDropdown ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-xs" />
-      </button>
+      <Button text severity="secondary" size="small" :icon="showDropdown ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" @click="showDropdown = !showDropdown" />
     </div>
     <div v-if="showDropdown" class="data-source-select__dropdown">
       <!-- 已有数据源列表 -->
@@ -25,10 +23,7 @@
       <!-- 新建数据源 -->
       <div class="data-source-select__section">
         <div class="data-source-select__section-label">新建数据源</div>
-        <button class="data-source-select__option" @click="createNew">
-          <i class="pi pi-plus text-xs text-brand-500" />
-          <span>自动生成 ID</span>
-        </button>
+        <Button text severity="secondary" size="small" icon="pi pi-plus" label="自动生成 ID" class="w-full justify-start pl-5" @click="createNew" />
       </div>
     </div>
   </div>
@@ -36,6 +31,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import Button from 'primevue/button'
 
 const props = defineProps<{
   value: string
@@ -93,14 +89,6 @@ function generateDataId(): string {
   border-radius: 3px;
   font-size: 12px;
   font-family: monospace;
-}
-
-.data-source-select__toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #9ca3af;
-  padding: 0 2px;
 }
 
 .data-source-select__dropdown {

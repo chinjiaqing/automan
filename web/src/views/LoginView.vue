@@ -3,18 +3,18 @@
     <div class="w-96 bg-white rounded-xl shadow-lg p-8">
       <!-- Logo -->
       <div class="text-center mb-8">
-        <i class="pi pi-bolt text-4xl text-brand-600 mb-3 block" />
-        <h1 class="text-2xl font-bold text-gray-800">Automan</h1>
-        <p class="text-sm text-gray-400 mt-1">自动化任务执行引擎</p>
+        <img src="/logo.png" alt="logo" class="w-16 h-16 mx-auto mb-3" />
+        <h1 class="text-2xl font-bold text-gray-800">凹凸曼</h1>
+        <p class="text-sm text-gray-400 mt-1">一个面向自动化的脚本编排引擎</p>
       </div>
 
       <!-- 表单 -->
       <div class="flex flex-col gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">服务器地址</label>
-          <input
+          <InputText
             v-model="host"
-            class="input-base"
+            class="w-full"
             placeholder="127.0.0.1 或域名"
             @keyup.enter="handleConnect"
           />
@@ -22,13 +22,13 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">端口</label>
-          <input
-            v-model.number="port"
-            type="number"
-            class="input-base"
+          <InputNumber
+            v-model="port"
+            class="w-full"
             placeholder="3000"
-            min="1"
-            max="65535"
+            :min="1"
+            :max="65535"
+            :use-grouping="false"
             @keyup.enter="handleConnect"
           />
         </div>
@@ -39,15 +39,14 @@
           {{ errorMsg }}
         </p>
 
-        <button
-          class="btn-primary w-full py-2.5 mt-2 flex items-center justify-center gap-2 text-base"
+        <Button
+          class="w-full mt-2"
+          :icon="connecting ? 'pi pi-spinner pi-spin' : 'pi pi-sign-in'"
+          :label="connecting ? '连接中...' : '连接'"
           :disabled="connecting"
+          size="large"
           @click="handleConnect"
-        >
-          <i v-if="connecting" class="pi pi-spinner pi-spin" />
-          <i v-else class="pi pi-sign-in" />
-          {{ connecting ? '连接中...' : '连接' }}
-        </button>
+        />
       </div>
     </div>
   </div>
@@ -56,6 +55,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
 import { useWebSocket } from '../composables/useWebSocket.js'
 import { setApiBase } from '../api/index.js'
 

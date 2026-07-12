@@ -1,9 +1,9 @@
 <template>
   <header class="h-14 flex items-center bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
     <!-- Left: Logo (w-60 与 sidebar 对齐) -->
-    <div class="w-60 flex items-center px-6 flex-shrink-0">
-      <i class="pi pi-bolt text-xl text-brand-600 mr-2" />
-      <h1 class="text-lg font-semibold text-gray-800">Automan</h1>
+    <div class="w-60 flex items-center px-4 flex-shrink-0">
+      <img src="/logo.png" alt="logo" class="w-7 h-7 mr-2" />
+      <h1 class="text-lg font-semibold text-gray-800">凹凸曼</h1>
     </div>
 
     <!-- Right: Navigation + Status -->
@@ -30,10 +30,7 @@
           <span class="w-2 h-2 rounded-full bg-green-500" />
           已连接
         </span>
-        <button class="btn-ghost text-xs" @click="handleDisconnect">
-          <i class="pi pi-sign-out mr-1" />
-          断开
-        </button>
+        <Button text size="small" severity="secondary" icon="pi pi-sign-out" label="断开" @click="handleDisconnect" />
       </div>
     </div>
   </header>
@@ -41,6 +38,7 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
+import Button from 'primevue/button'
 import { useWebSocket } from '../composables/useWebSocket.js'
 
 const route = useRoute()

@@ -5,33 +5,34 @@
       <!-- 设备选择 -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">当前设备</label>
-        <select v-model="selectedDeviceId" class="input-base">
-          <option value="">请选择设备</option>
-          <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.name }}</option>
-        </select>
+        <Select
+          v-model="selectedDeviceId"
+          :options="devices"
+          option-label="name"
+          option-value="id"
+          placeholder="请选择设备"
+          class="w-full"
+          size="small"
+        />
       </div>
 
       <!-- 截屏按钮 -->
-      <button
-        class="btn-primary w-full flex items-center justify-center gap-2"
+      <Button
+        class="w-full"
+        :icon="capturing ? 'pi pi-spinner pi-spin' : 'pi pi-camera'"
+        :label="capturing ? '截屏中...' : '截屏'"
         :disabled="!selectedDeviceId || capturing"
         @click="handleCapture"
-      >
-        <i :class="capturing ? 'pi pi-spinner pi-spin' : 'pi pi-camera'" />
-        {{ capturing ? '截屏中...' : '截屏' }}
-      </button>
+        size="small"
+      />
 
       <!-- 框选坐标（常显） -->
       <div class="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
         <div class="flex items-center justify-between mb-1.5">
           <span class="text-xs text-gray-500">当前选中：</span>
           <div class="flex items-center gap-2">
-            <button class="text-brand-600 hover:text-brand-700 transition-colors" title="复制坐标" @click="copyCoords">
-              <i :class="copied ? 'pi pi-check text-green-500' : 'pi pi-copy'" class="text-xs" />
-            </button>
-            <button v-if="selection || selectionBox" class="text-gray-500 hover:text-gray-700 transition-colors" title="清除选区" @click="clearSelection">
-              <i class="pi pi-times text-xs" />
-            </button>
+            <Button text severity="secondary" size="small" :icon="copied ? 'pi pi-check' : 'pi pi-copy'" :class="copied ? 'text-green-500' : 'text-brand-600'" @click="copyCoords" />
+            <Button v-if="selection || selectionBox" text severity="secondary" size="small" icon="pi pi-times" @click="clearSelection" />
           </div>
         </div>
         <code class="text-brand-700 font-mono text-xs block mb-1">
@@ -41,32 +42,29 @@
           宽 {{ origWidth }} × 高 {{ origHeight }}
           <span v-if="!selection" class="text-gray-500 ml-1">(全屏)</span>
         </div>
-        <button
+        <Button
           v-if="selection"
-          class="btn-ghost w-full mt-2 flex items-center justify-center gap-1 text-xs py-1.5"
+          class="w-full mt-2"
+          size="small"
+          severity="secondary"
+          text
+          icon="pi pi-save"
+          label="保存选区图片"
           @click="saveSelection"
-        >
-          <i class="pi pi-save text-xs" />
-          保存选区图片
-        </button>
+        />
       </div>
 
       <!-- Tab: 找图 / OCR -->
       <div class="flex flex-col">
-        <div class="flex border-b border-gray-200 mb-3">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            class="flex-1 py-2 text-sm text-center transition-colors border-b-2"
-            :class="activeTab === tab.key
-              ? 'text-brand-600 border-brand-600 font-medium'
-              : 'text-gray-500 border-transparent hover:text-gray-700'"
-            @click="activeTab = tab.key"
-          >
-            <i :class="`pi ${tab.icon} mr-1`" />
-            {{ tab.label }}
-          </button>
-        </div>
+        <SelectButton
+          v-model="activeTab"
+          :options="tabs"
+          option-label="label"
+          option-value="key"
+          :allow-empty="false"
+          class="mb-3"
+          size="small"
+        />
 
         <FindPicPanel
           v-if="activeTab === 'find'"
@@ -83,55 +81,47 @@
 
       <!-- 点击操作区 -->
       <div class="border-t border-gray-200 pt-3 flex flex-col gap-2">
-        <div class="flex border border-gray-200 rounded overflow-hidden">
-          <button
-            v-for="ct in clickTabs"
-            :key="ct.key"
-            class="flex-1 py-1.5 text-xs text-center transition-colors"
-            :class="activeClickTab === ct.key
-              ? 'bg-brand-500 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-50'"
-            @click="activeClickTab = ct.key"
-          >
-            <i :class="`pi ${ct.icon} mr-1`" />
-            {{ ct.label }}
-          </button>
-        </div>
+        <SelectButton
+          v-model="activeClickTab"
+          :options="clickTabs"
+          option-label="label"
+          option-value="key"
+          :allow-empty="false"
+          size="small"
+        />
 
         <!-- 单点点击 -->
         <div v-if="activeClickTab === 'click'" class="flex items-center gap-2">
-          <input
+          <InputText
             v-model="clickPoint"
-            type="text"
             placeholder="[x, y]"
-            class="input-base text-sm flex-1 font-mono"
+            class="flex-1 font-mono"
+            size="small"
           />
-          <button
-            class="btn-primary px-3 py-1.5 text-xs flex items-center gap-1"
+          <Button
+            :icon="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'"
+            label="点击"
             :disabled="!selectedDeviceId || clickLoading"
             @click="handleClick"
-          >
-            <i :class="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'" />
-            点击
-          </button>
+            size="small"
+          />
         </div>
 
         <!-- 范围点击 -->
         <div v-if="activeClickTab === 'area'" class="flex items-center gap-2">
-          <input
+          <InputText
             v-model="clickArea"
-            type="text"
             placeholder="[x1, y1, x2, y2]"
-            class="input-base text-sm flex-1 font-mono"
+            class="flex-1 font-mono"
+            size="small"
           />
-          <button
-            class="btn-primary px-3 py-1.5 text-xs flex items-center gap-1"
+          <Button
+            :icon="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'"
+            label="点击"
             :disabled="!selectedDeviceId || clickLoading"
             @click="handleAreaClick"
-          >
-            <i :class="clickLoading ? 'pi pi-spinner pi-spin' : 'pi pi-bullseye'" />
-            点击
-          </button>
+            size="small"
+          />
         </div>
       </div>
     </div>
@@ -149,23 +139,22 @@
             @click="pickColor"
           />
           <span class="text-[11px] font-mono text-gray-500 select-all">{{ pickedColor }}</span>
-          <button
-            class="w-6 h-6 flex items-center justify-center rounded transition-colors"
-            :class="colorCopied ? 'text-green-500' : 'hover:bg-gray-200 text-gray-400'"
-            title="复制颜色值"
+          <Button
+            text
+            :severity="colorCopied ? 'success' : 'secondary'"
+            size="small"
+            :icon="colorCopied ? 'pi pi-check' : 'pi pi-copy'"
             @click="copyColor"
-          >
-            <i :class="colorCopied ? 'pi pi-check' : 'pi pi-copy'" class="text-[11px]" />
-          </button>
+          />
           <div class="w-px h-4 bg-gray-200 mx-0.5" />
-          <button
-            class="w-7 h-7 flex items-center justify-center rounded-md transition-all cursor-crosshair"
-            :class="eyedropperActive ? 'bg-brand-500 text-white scale-110' : 'hover:bg-gray-200 text-gray-500'"
-            title="屏幕取色"
+          <Button
+            text
+            :severity="eyedropperActive ? 'primary' : 'secondary'"
+            size="small"
+            icon="pi pi-palette"
+            :class="eyedropperActive ? 'scale-110' : ''"
             @click="pickColor"
-          >
-            <i class="pi pi-palette text-xs" />
-          </button>
+          />
         </div>
 
         <!-- 后续工具组占位：用同样的 .tool-group 样式，组间加 gap-4 即可 -->
@@ -268,6 +257,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
+import SelectButton from 'primevue/selectbutton'
 import type { ScreenshotResponse, FindPicProMatch } from '@automan/shared/types.js'
 import { deviceApi } from '../api/device.js'
 import { useDevices } from '../composables/useDevices.js'

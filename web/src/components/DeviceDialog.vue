@@ -10,9 +10,9 @@
       <!-- 别名 -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">设备别名</label>
-        <input
+        <InputText
           v-model="form.name"
-          class="input-base"
+          class="w-full"
           placeholder="如：大号专用"
           maxlength="30"
         />
@@ -22,16 +22,13 @@
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">ldconsole.exe 路径</label>
         <div class="flex gap-2">
-          <input
+          <InputText
             v-model="form.ldconsolePath"
-            class="input-base flex-1"
+            class="flex-1"
             placeholder="点击下方按钮浏览选择"
             readonly
           />
-          <button class="btn-ghost whitespace-nowrap" @click="openBrowser">
-            <i class="pi pi-folder mr-1" />
-            浏览
-          </button>
+          <Button severity="secondary" text icon="pi pi-folder" label="浏览" @click="openBrowser" />
         </div>
         <p v-if="pathStatus === 'valid'" class="text-xs text-green-600 mt-1 flex items-center gap-1">
           <i class="pi pi-check-circle" />
@@ -83,11 +80,8 @@
     </div>
 
     <template #footer>
-      <button class="btn-ghost" @click="$emit('update:visible', false)">取消</button>
-      <button class="btn-primary" :disabled="submitting" @click="handleSubmit">
-        <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-        {{ submitting ? '提交中...' : (isEdit ? '保存' : '创建') }}
-      </button>
+      <Button severity="secondary" text label="取消" @click="$emit('update:visible', false)" />
+      <Button :label="submitting ? '提交中...' : (isEdit ? '保存' : '创建')" :disabled="submitting" :icon="submitting ? 'pi pi-spinner pi-spin' : undefined" @click="handleSubmit" />
     </template>
   </Dialog>
 
@@ -106,14 +100,15 @@
       </div>
 
       <!-- 返回上级 -->
-      <button
+      <Button
         v-if="browserParent !== null"
-        class="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors"
+        text
+        severity="secondary"
+        size="small"
+        icon="pi pi-arrow-up"
+        label="返回上级"
         @click="navigateTo(browserParent!)"
-      >
-        <i class="pi pi-arrow-up" />
-        返回上级
-      </button>
+      />
 
       <!-- 文件列表 -->
       <div class="flex-1 overflow-y-auto border border-gray-200 rounded">
@@ -144,6 +139,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import Dialog from 'primevue/dialog'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import type { DeviceInfo, FileEntry, LDInstanceInfo } from '@automan/shared/types.js'
 import { deviceApi, filesystemApi } from '../api/device.js'
 import { useDevices } from '../composables/useDevices.js'

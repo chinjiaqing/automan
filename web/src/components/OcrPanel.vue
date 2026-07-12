@@ -1,43 +1,28 @@
 <template>
   <div class="flex flex-col gap-3">
     <!-- 模式切换：识字 / 找字 -->
-    <div class="flex border border-gray-200 rounded overflow-hidden">
-      <button
-        class="flex-1 py-1.5 text-xs text-center transition-colors"
-        :class="mode === 'words' ? 'bg-brand-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-        @click="mode = 'words'"
-      >
-        识字
-      </button>
-      <button
-        class="flex-1 py-1.5 text-xs text-center transition-colors"
-        :class="mode === 'find' ? 'bg-brand-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-        @click="mode = 'find'"
-      >
-        找字
-      </button>
-    </div>
+    <SelectButton
+      v-model="mode"
+      :options="modeOptions"
+      option-label="label"
+      option-value="value"
+      :allow-empty="false"
+      size="small"
+    />
 
     <!-- 找字：目标文字输入 -->
     <div v-if="mode === 'find'" class="flex flex-col gap-2">
-      <input
+      <InputText
         v-model="target"
-        type="text"
         placeholder="要查找的文字..."
-        class="input-base text-sm"
+        size="small"
       />
       <div>
         <div class="flex items-center justify-between mb-1">
           <span class="text-xs text-gray-500">相似度</span>
           <span class="text-xs font-mono text-brand-600">{{ similarity }}%</span>
         </div>
-        <input
-          type="range"
-          min="50"
-          max="100"
-          v-model.number="similarity"
-          class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-        />
+        <Slider v-model="similarity" :min="50" :max="100" />
       </div>
     </div>
 
@@ -45,29 +30,26 @@
     <div>
       <span class="text-xs text-gray-500 block mb-1">颜色过滤</span>
       <div class="relative">
-        <input
+        <InputText
           v-model="selectedColor"
-          type="text"
           placeholder="如 red、#FF0000、0,0,255..."
-          class="input-base text-sm pr-7"
+          size="small"
+          class="w-full pr-7"
         />
-        <button
+        <Button
           v-if="selectedColor"
-          class="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 transition-colors"
+          text
+          rounded
+          severity="secondary"
+          size="small"
+          icon="pi pi-times"
+          class="absolute right-1 top-1/2 -translate-y-1/2"
           @click="selectedColor = ''"
-        >
-          <i class="pi pi-times text-[10px]" />
-        </button>
+        />
       </div>
       <div class="flex gap-1.5 mt-1.5">
-        <button
-          class="px-1.5 py-0.5 text-[10px] font-mono rounded border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors"
-          @click="selectedColor = 'white'"
-        >#ffffff</button>
-        <button
-          class="px-1.5 py-0.5 text-[10px] font-mono rounded border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors"
-          @click="selectedColor = 'black'"
-        >#000000</button>
+        <Button text size="small" severity="secondary" label="#ffffff" class="text-[10px] font-mono" @click="selectedColor = 'white'" />
+        <Button text size="small" severity="secondary" label="#000000" class="text-[10px] font-mono" @click="selectedColor = 'black'" />
       </div>
       <!-- 颜色偏差滑块 -->
       <div v-if="selectedColor" class="mt-2">
@@ -75,13 +57,7 @@
           <span class="text-[10px] text-gray-400">颜色偏差</span>
           <span class="text-[10px] font-mono text-brand-600">{{ colorTolerance }}</span>
         </div>
-        <input
-          type="range"
-          min="5"
-          max="100"
-          v-model.number="colorTolerance"
-          class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-        />
+        <Slider v-model="colorTolerance" :min="5" :max="100" />
         <div class="flex justify-between text-[9px] text-gray-300">
           <span>精确</span>
           <span>宽松</span>
@@ -90,14 +66,13 @@
     </div>
 
     <!-- 执行按钮 -->
-    <button
-      class="btn-primary w-full flex items-center justify-center gap-2"
+    <Button
+      class="w-full"
+      :label="loading ? '识别中...' : (mode === 'words' ? (selection ? '识别选区' : '识别全图') : '查找文字')"
+      :icon="loading ? 'pi pi-spinner pi-spin' : 'pi pi-search'"
       :disabled="!screenshot || loading || (mode === 'find' && !target)"
       @click="handleOcr"
-    >
-      <i :class="loading ? 'pi pi-spinner pi-spin' : 'pi pi-search'" />
-      {{ loading ? '识别中...' : (mode === 'words' ? (selection ? '识别选区' : '识别全图') : '查找文字') }}
-    </button>
+    />
 
     <!-- 结果展示 -->
     <!-- 识字结果 -->
@@ -154,6 +129,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import SelectButton from 'primevue/selectbutton'
+import Slider from 'primevue/slider'
 import type {
   ScreenshotResponse,
   OcrWord,
@@ -174,6 +153,10 @@ const emit = defineEmits<{
   'highlight-word': [word: OcrWord]
 }>()
 
+const modeOptions = [
+  { label: '识字', value: 'words' },
+  { label: '找字', value: 'find' },
+]
 const mode = ref<'words' | 'find'>('words')
 const target = ref('')
 const similarity = ref(80)

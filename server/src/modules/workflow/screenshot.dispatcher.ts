@@ -7,9 +7,7 @@ import sharp from 'sharp'
 import { AdbService } from '../device/adb.service.js'
 import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 import { logger } from '../../core/logger.js'
-
-/** 压缩后最大宽度 */
-const MAX_WIDTH = 720
+import { config } from '../../config.js'
 
 /** 截图事件负载 */
 export interface ScreenshotEvent {
@@ -29,8 +27,8 @@ export interface DeviceScreenshotInfo {
   instanceIndex: number
 }
 
-/** 默认截图间隔（毫秒） */
-const DEFAULT_INTERVAL = 2000
+/** 默认截图间隔（毫秒），从配置文件读取 */
+const DEFAULT_INTERVAL = config.screenshot.interval
 
 export class ScreenshotDispatcher {
   private adbService = new AdbService()
@@ -99,9 +97,9 @@ export class ScreenshotDispatcher {
       const originalWidth = rawMeta.width ?? 0
       const originalHeight = rawMeta.height ?? 0
 
-      // 压缩到 MAX_WIDTH
+      // 强制 resize 到标准分辨率宽度
       const { data, info } = await sharp(rawBuf)
-        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+        .resize({ width: config.resolution.width })
         .png({ compressionLevel: 6 })
         .toBuffer({ resolveWithObject: true })
 

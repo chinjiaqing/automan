@@ -10,8 +10,9 @@
       <!-- 节点名称 -->
       <div class="config-panel__field">
         <label class="config-panel__label">节点名称</label>
-        <input
-          class="config-panel__input"
+        <InputText
+          class="w-full"
+          size="small"
           :value="nodeLabel"
           @input="emit('update:label', ($event.target as HTMLInputElement).value)"
         />
@@ -24,43 +25,43 @@
           <label class="config-panel__label">{{ field.label }}</label>
 
           <!-- text -->
-          <input
+          <InputText
             v-if="field.type === 'text'"
-            class="config-panel__input"
-            type="text"
+            class="w-full"
+            size="small"
             :value="getConfig(field.key)"
             :placeholder="field.placeholder"
             @input="setConfig(field.key, ($event.target as HTMLInputElement).value)"
           />
 
           <!-- number -->
-          <input
+          <InputNumber
             v-else-if="field.type === 'number'"
-            class="config-panel__input"
-            type="number"
-            :value="getConfig(field.key)"
-            @input="setConfig(field.key, Number(($event.target as HTMLInputElement).value))"
+            class="w-full"
+            size="small"
+            :use-grouping="false"
+            :model-value="getConfig(field.key) as number"
+            @update:model-value="setConfig(field.key, $event)"
           />
 
           <!-- select -->
-          <select
+          <Select
             v-else-if="field.type === 'select'"
-            class="config-panel__input"
+            class="w-full"
+            size="small"
+            :options="field.options"
             :value="getConfig(field.key)"
-            @change="setConfig(field.key, ($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
+            @update:modelValue="setConfig(field.key, $event)"
+          />
 
           <!-- slider -->
           <div v-else-if="field.type === 'slider'" class="flex items-center gap-2">
-            <input
+            <Slider
               class="flex-1"
-              type="range"
               :min="field.min ?? 0"
               :max="field.max ?? 100"
-              :value="getConfig(field.key) ?? field.default ?? 50"
-              @input="setConfig(field.key, Number(($event.target as HTMLInputElement).value))"
+              :model-value="(getConfig(field.key) ?? field.default ?? 50) as number"
+              @update:model-value="setConfig(field.key, $event as number)"
             />
             <span class="text-xs text-gray-500 w-8 text-right">
               {{ getConfig(field.key) ?? field.default ?? 50 }}
@@ -85,10 +86,10 @@
           />
 
           <!-- coord-input -->
-          <input
+          <InputText
             v-else-if="field.type === 'coord-input'"
-            class="config-panel__input"
-            type="text"
+            class="w-full"
+            size="small"
             placeholder="x,y,w,h"
             :value="formatCoord(getConfig(field.key))"
             @input="setConfig(field.key, parseCoord(($event.target as HTMLInputElement).value))"
@@ -96,12 +97,32 @@
 
           <!-- image-upload -->
           <div v-else-if="field.type === 'image-upload'" class="config-panel__field">
-            <button
-              class="btn-ghost text-xs w-full border border-dashed border-gray-300 py-2 rounded"
+            <!-- 已上传图片预览 -->
+            <div v-if="getConfig(field.key)" class="mb-1.5 relative inline-block">
+              <img
+                :src="getConfig(field.key) as string"
+                class="block rounded border border-gray-200"
+                style="max-width: 100%; max-height: 80px;"
+              />
+              <Button
+                text
+                rounded
+                severity="secondary"
+                size="small"
+                icon="pi pi-times"
+                class="absolute -top-1.5 -right-1.5"
+                title="移除图片"
+                @click.stop="setConfig(field.key, '')"
+              />
+            </div>
+            <Button
+              text
+              severity="secondary"
+              size="small"
+              class="w-full border border-dashed border-gray-300"
+              :label="getConfig(field.key) ? '点击替换' : '点击上传模板图片'"
               @click="handleImageUpload(field.key)"
-            >
-              {{ getConfig(field.key) ? '已上传（点击替换）' : '点击上传模板图片' }}
-            </button>
+            />
             <input
               :ref="(el) => setFileRef(field.key, el as HTMLInputElement)"
               type="file"
@@ -140,6 +161,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
+import Slider from 'primevue/slider'
 import { getNodeTypeDef } from '../../flow/nodeTypes.js'
 import type { NodeTypeDefinition, FieldSchema } from '@automan/shared/types.js'
 import DataRefInput from './DataRefInput.vue'
@@ -249,20 +275,6 @@ function onFileChange(event: Event, key: string) {
   font-weight: 500;
   color: #6b7280;
   margin-bottom: 4px;
-}
-
-.config-panel__input {
-  width: 100%;
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 13px;
-  outline: none;
-}
-
-.config-panel__input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .config-panel__outputs {

@@ -1,24 +1,28 @@
 <template>
   <div class="flex flex-col gap-3">
-    <button
-      class="btn-ghost w-full flex items-center justify-center gap-2 border border-dashed border-gray-300 py-4"
+    <Button
+      text
+      severity="secondary"
+      class="w-full"
+      icon="pi pi-upload"
+      :label="templateImage ? '重新上传模板' : '上传目标图片'"
       @click="handleUploadImage"
-    >
-      <i class="pi pi-upload" />
-      {{ templateImage ? '重新上传模板' : '上传目标图片' }}
-    </button>
+    />
     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileSelected" />
 
     <!-- 模板预览 -->
     <div v-if="templateImage" class="relative bg-gray-50 border border-gray-200 rounded p-1">
       <img :src="templateImage" class="max-h-20 mx-auto block" />
-      <button
-        class="absolute top-0.5 right-0.5 text-gray-400 hover:text-red-500 transition-colors"
+      <Button
+        text
+        rounded
+        severity="secondary"
+        size="small"
+        icon="pi pi-times"
+        class="absolute top-0.5 right-0.5"
         title="移除模板"
         @click="removeTemplate"
-      >
-        <i class="pi pi-times text-xs" />
-      </button>
+      />
     </div>
 
     <!-- 相似度滑块 -->
@@ -27,24 +31,17 @@
         <span class="text-xs text-gray-500">相似度</span>
         <span class="text-xs font-mono text-brand-600">{{ similarity }}%</span>
       </div>
-      <input
-        type="range"
-        min="30"
-        max="100"
-        v-model.number="similarity"
-        class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-      />
+      <Slider v-model="similarity" :min="30" :max="100" />
     </div>
 
     <!-- 查找按钮 -->
-    <button
-      class="btn-primary w-full flex items-center justify-center gap-2"
+    <Button
+      class="w-full"
+      :label="finding ? '查找中...' : '查找'"
+      :icon="finding ? 'pi pi-spinner pi-spin' : 'pi pi-search'"
       :disabled="!screenshot || !templateImage || finding"
       @click="handleFindPic"
-    >
-      <i :class="finding ? 'pi pi-spinner pi-spin' : 'pi pi-search'" />
-      {{ finding ? '查找中...' : '查找' }}
-    </button>
+    />
 
     <!-- 匹配结果 -->
     <div v-if="findResults.length > 0" class="flex flex-col gap-1">
@@ -69,6 +66,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import Button from 'primevue/button'
+import Slider from 'primevue/slider'
 import type { ScreenshotResponse, FindPicProMatch } from '@automan/shared/types.js'
 import type { Selection } from '../composables/useSelection.js'
 import { deviceApi } from '../api/device.js'

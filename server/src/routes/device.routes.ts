@@ -5,7 +5,9 @@
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
+import sharp from 'sharp'
 import { db, devices } from '../db/index.js'
+import { config } from '../config.js'
 import { eq } from 'drizzle-orm'
 import type {
   CreateDeviceRequest,
@@ -205,19 +207,31 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const pngBuffer = await adbService.screencap(device.ldconsolePath, device.instanceIndex)
-        const base64 = pngBuffer.toString('base64')
-        const dataUrl = `data:image/png;base64,${base64}`
+        const rawBuffer = await adbService.screencap(device.ldconsolePath, device.instanceIndex)
 
-        // 解析 PNG 尺寸（从 IHDR chunk 读取）
-        const { width, height } = parsePngSize(pngBuffer)
+        // 读取原始分辨率
+        const rawMeta = await sharp(rawBuffer).metadata()
+        const originalWidth = rawMeta.width ?? 0
+        const originalHeight = rawMeta.height ?? 0
+
+        // 强制 resize 到标准分辨率宽度
+        const targetWidth = config.resolution.width
+        const { data: resizedBuffer, info } = await sharp(rawBuffer)
+          .resize({ width: targetWidth })
+          .png({ compressionLevel: 6 })
+          .toBuffer({ resolveWithObject: true })
+
+        const base64 = resizedBuffer.toString('base64')
+        const dataUrl = `data:image/png;base64,${base64}`
 
         return {
           success: true as const,
           data: {
             image: dataUrl,
-            width,
-            height,
+            width: info.width,
+            height: info.height,
+            originalWidth,
+            originalHeight,
             timestamp: Date.now(),
           },
         }

@@ -13,19 +13,11 @@
         <!-- 工作流行：标题 + 开关 -->
         <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 group">
           <!-- 展开箭头 -->
-          <button
-            class="p-0.5 text-gray-400 hover:text-gray-600 transition-colors"
-            @click="toggleExpand(wf.id)"
-          >
-            <i
-              class="pi text-xs transition-transform"
-              :class="expandedId === wf.id ? 'pi-chevron-down' : 'pi-chevron-right'"
-            />
-          </button>
+          <Button text rounded severity="secondary" size="small" :icon="expandedId === wf.id ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" @click="toggleExpand(wf.id)" />
 
           <!-- 标题（点击跳转到编辑器） -->
           <button
-            class="flex-1 text-sm text-left truncate hover:text-brand-600 transition-colors"
+            class="flex-1 text-sm text-left truncate hover:text-brand-600 transition-colors bg-transparent border-none cursor-pointer"
             @click="toggleExpand(wf.id)"
           >
             {{ wf.name }}
@@ -47,9 +39,7 @@
         <div v-if="expandedId === wf.id" class="ml-6 mr-2 mb-2 px-2 py-2 bg-gray-50 rounded text-xs space-y-2">
           <div class="flex items-center gap-2">
             <span class="text-gray-500 w-16">触发方式</span>
-            <select class="flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs outline-none">
-              <option value="screenshot">每次截图</option>
-            </select>
+            <Select :options="['每次截图']" model-value="每次截图" class="flex-1" size="small" />
           </div>
           <div class="text-gray-400 text-center py-1">更多配置待扩展</div>
         </div>
@@ -60,6 +50,8 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
+import Button from 'primevue/button'
+import Select from 'primevue/select'
 import type { Workflow } from '@automan/shared/types.js'
 import { workflowApi } from '../api/workflow.js'
 import { useWorkflowRun } from '../composables/useWorkflowRun.js'

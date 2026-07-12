@@ -94,12 +94,12 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
     },
   )
 
-  // ── 保存工作流（nodes + edges）────────────────
+  // ── 保存工作流（nodes + edges + 可选 name）────────────────
   app.post<{ Params: { id: string }; Body: SaveWorkflowRequest }>(
     '/api/workflows/:id/save',
     async (request, reply) => {
       const { id } = request.params
-      const { nodes, edges } = request.body
+      const { nodes, edges, name } = request.body
 
       const existing = db.select().from(workflows).where(eq(workflows.id, id)).get()
       if (!existing) {
@@ -110,12 +110,17 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
         })
       }
 
+      const updateData: Record<string, unknown> = {
+        nodesJson: JSON.stringify(nodes ?? []),
+        edgesJson: JSON.stringify(edges ?? []),
+        updatedAt: Date.now(),
+      }
+      if (name !== undefined) {
+        updateData.name = name
+      }
+
       db.update(workflows)
-        .set({
-          nodesJson: JSON.stringify(nodes ?? []),
-          edgesJson: JSON.stringify(edges ?? []),
-          updatedAt: Date.now(),
-        })
+        .set(updateData)
         .where(eq(workflows.id, id))
         .run()
 

@@ -11,6 +11,18 @@ import { getWords } from '../../libs/ocr.js'
 import { findStr } from '../../libs/ocr.js'
 import { adbClick, adbAreaClick } from '../../libs/adb-click.js'
 
+/** 从 data URL (base64 PNG) 解析图片尺寸 */
+function parsePngSizeFromDataUrl(dataUrl: string): { width: number; height: number } {
+  const commaIdx = dataUrl.indexOf(',')
+  if (commaIdx === -1) return { width: 0, height: 0 }
+  const raw = dataUrl.slice(commaIdx + 1)
+  const buf = Buffer.from(raw.slice(0, 32), 'base64')
+  if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50) {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+  }
+  return { width: 0, height: 0 }
+}
+
 /** 原始视觉注解（引擎层，不含工作流信息） */
 export interface RawAnnotation {
   type: 'bbox' | 'click' | 'area' | 'text'
@@ -28,10 +40,10 @@ export interface EngineContext {
   adbPath: string
   adbTarget: string
   annotations: RawAnnotation[]
-  /** 压缩图尺寸 */
+  /** 截图尺寸（始终 = 标准分辨率） */
   screenshotWidth: number
   screenshotHeight: number
-  /** 原始设备分辨率 */
+  /** 原始设备分辨率（用于 ADB 操作坐标转换） */
   originalWidth: number
   originalHeight: number
 }
@@ -313,60 +325,44 @@ export class WorkflowEngine {
     return { nextNodeId: this.followEdge(loopNode.id, 'exit', adj), steps }
   }
 
-  /**
-   * 将原始分辨率 region 缩放到压缩图空间
-   * [x1, y1, x2, y2] 原始 → [x1', y1', x2', y2'] 压缩
-   */
-  private scaleRegionToCompressed(
-    region: [number, number, number, number],
-    ctx: EngineContext,
-  ): [number, number, number, number] {
-    const sx = ctx.screenshotWidth / ctx.originalWidth
-    const sy = ctx.screenshotHeight / ctx.originalHeight
-    return [
-      Math.round(region[0] * sx),
-      Math.round(region[1] * sy),
-      Math.round(region[2] * sx),
-      Math.round(region[3] * sy),
-    ]
-  }
-
   /** 识图节点 */
   private async execFindPic(node: WorkflowNode, ctx: EngineContext): Promise<void> {
     const { templateImage, threshold, region } = node.config as Record<string, unknown>
     if (!templateImage) throw new Error('识图节点缺少模板图片')
 
-    // region 参数为原始分辨率，缩放到压缩图空间
-    const originalRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
-    const compressedRegion = this.scaleRegionToCompressed(originalRegion, ctx)
+    // region 直接使用标准分辨率坐标（截图已是标准分辨率，无需转换）
+    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
 
+    const templateStr = String(templateImage)
     const result = await findPicPro({
       image: ctx.screenshot,
-      template: String(templateImage),
+      template: templateStr,
       threshold: Number(threshold ?? 80) / 100,
-      region: compressedRegion,
+      region: searchRegion,
     })
     const first = result.matches[0]
 
-    // 压缩图坐标 → 原始分辨率坐标
-    const scaleX = ctx.originalWidth / ctx.screenshotWidth
-    const scaleY = ctx.originalHeight / ctx.screenshotHeight
+    // 解析模板图片尺寸（从 base64 PNG 头部读取）
+    const { width: templateW, height: templateH } = parsePngSizeFromDataUrl(templateStr)
 
+    // 结果坐标已是标准分辨率，直接使用
     ctx.outputs[node.id] = {
       matchCount: result.matches.length,
-      matchX: first ? Math.round(first.x * scaleX) : -1,
-      matchY: first ? Math.round(first.y * scaleY) : -1,
+      matchX: first ? Math.round(first.x) : -1,
+      matchY: first ? Math.round(first.y) : -1,
     }
-    // 视觉注解：所有匹配点（转为原始分辨率坐标）
+    // 视觉注解：所有匹配点（已是标准分辨率），携带模板尺寸
     if (result.matches.length > 0) {
       ctx.annotations.push({
         type: 'bbox',
         nodeId: node.id,
         label: node.label || 'findPic',
         data: {
+          templateW,
+          templateH,
           matches: result.matches.map((m) => ({
-            x: Math.round(m.x * scaleX),
-            y: Math.round(m.y * scaleY),
+            x: Math.round(m.x),
+            y: Math.round(m.y),
             confidence: m.confidence,
           })),
         },
@@ -377,11 +373,11 @@ export class WorkflowEngine {
   /** OCR 识字节点 */
   private async execOcrWords(node: WorkflowNode, ctx: EngineContext): Promise<void> {
     const { region } = node.config as Record<string, unknown>
-    const originalRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
-    const compressedRegion = this.scaleRegionToCompressed(originalRegion, ctx)
+    // region 直接使用标准分辨率坐标
+    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
     const result = await getWords({
       image: ctx.screenshot,
-      region: compressedRegion,
+      region: searchRegion,
     })
     const text = result.words.map((w) => w.text).join('')
     ctx.outputs[node.id] = { text, wordCount: result.words.length }
@@ -392,27 +388,24 @@ export class WorkflowEngine {
     const { target, similarity, region } = node.config as Record<string, unknown>
     if (!target) throw new Error('找字节点缺少目标文字')
 
-    // region 参数为原始分辨率，缩放到压缩图空间
-    const originalRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
-    const compressedRegion = this.scaleRegionToCompressed(originalRegion, ctx)
+    // region 直接使用标准分辨率坐标
+    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
 
     const result = await findStr({
       image: ctx.screenshot,
       target: String(target),
       similarity: Number(similarity ?? 80) / 100,
-      region: compressedRegion,
+      region: searchRegion,
     })
     const first = result.matches[0]
 
-    const scaleX = ctx.originalWidth / ctx.screenshotWidth
-    const scaleY = ctx.originalHeight / ctx.screenshotHeight
-
+    // 结果坐标已是标准分辨率，直接使用
     ctx.outputs[node.id] = {
       matchCount: result.matches.length,
-      matchX: first ? Math.round(first.x * scaleX) : -1,
-      matchY: first ? Math.round(first.y * scaleY) : -1,
+      matchX: first ? Math.round(first.x) : -1,
+      matchY: first ? Math.round(first.y) : -1,
     }
-    // 视觉注解：匹配到的文字区域（转为原始分辨率坐标）
+    // 视觉注解：匹配到的文字区域（已是标准分辨率）
     if (result.matches.length > 0) {
       ctx.annotations.push({
         type: 'text',
@@ -420,10 +413,10 @@ export class WorkflowEngine {
         label: node.label || 'ocrFindStr',
         data: {
           matches: result.matches.map((m) => ({
-            x: Math.round(m.x * scaleX),
-            y: Math.round(m.y * scaleY),
-            w: Math.round((m.w || 0) * scaleX),
-            h: Math.round((m.h || 0) * scaleY),
+            x: Math.round(m.x),
+            y: Math.round(m.y),
+            w: Math.round(m.w || 0),
+            h: Math.round(m.h || 0),
             text: m.text,
             similarity: m.similarity,
           })),

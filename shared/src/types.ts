@@ -223,6 +223,9 @@ export interface ScreenshotResponse {
   image: string // data:image/png;base64,...
   width: number
   height: number
+  /** 原始设备分辨率（供 ADB 操作使用） */
+  originalWidth: number
+  originalHeight: number
   timestamp: number
 }
 
@@ -459,6 +462,8 @@ export interface CreateWorkflowRequest {
 
 /** 保存工作流请求 */
 export interface SaveWorkflowRequest {
+  /** 工作流名称（可选，传入则同时更新名称） */
+  name?: string
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
 }
