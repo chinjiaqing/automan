@@ -36,15 +36,31 @@ const router = createRouter({
   ],
 })
 
-// 路由守卫：未连接 WS → 跳转登录页；已连接 → 登录页重定向到首页
-router.beforeEach((to) => {
-  const { state } = useWebSocket()
-  if (to.meta.requiresAuth !== false && state.value !== 'connected') {
-    return { name: 'login' }
+// 路由守卫：未连接时尝试缓存重连，失败才跳登录页
+let reconnectAttempted = false
+
+router.beforeEach(async (to) => {
+  const { state, reconnectFromCache } = useWebSocket()
+
+  // 已连接 → 重置标记(允许下次断线后再重连) + 登录页重定向到首页
+  if (state.value === 'connected') {
+    reconnectAttempted = false
+    if (to.name === 'login') return { name: 'home' }
+    return
   }
-  if (to.name === 'login' && state.value === 'connected') {
-    return { name: 'home' }
+
+  // 不需要认证的页面直接放行
+  if (to.meta.requiresAuth === false) return
+
+  // 未连接且未尝试过重连 → 尝试从缓存恢复
+  if (!reconnectAttempted) {
+    reconnectAttempted = true
+    const ok = await reconnectFromCache()
+    if (ok) return // 重连成功，放行
   }
+
+  // 重连失败或无缓存 → 跳登录页
+  return { name: 'login' }
 })
 
 export default router

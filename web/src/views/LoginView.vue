@@ -59,13 +59,23 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import { useWebSocket } from '../composables/useWebSocket.js'
-import { setApiBase } from '../api/index.js'
+
+const CACHE_KEY = 'automan_server'
 
 const router = useRouter()
 const { connect, state } = useWebSocket()
 
-const host = ref('127.0.0.1')
-const port = ref(3000)
+// 从缓存读取上次的服务器地址
+const cached = (() => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (raw) return JSON.parse(raw) as { host: string; port: number }
+  } catch { /* ignore */ }
+  return null
+})()
+
+const host = ref(cached?.host ?? '127.0.0.1')
+const port = ref(cached?.port ?? 3000)
 const connecting = ref(false)
 const errorMsg = ref('')
 
@@ -82,11 +92,10 @@ async function handleConnect() {
 
   connecting.value = true
   try {
-    // 设置 HTTP API base URL
-    const protocol = location.protocol
-    setApiBase(`${protocol}//${host.value}:${port.value}`)
-
     await connect(host.value.trim(), port.value)
+
+    // 连接成功 → 缓存到 localStorage
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ host: host.value.trim(), port: port.value }))
 
     // 连接成功 → 跳转首页
     router.push({ name: 'home' })
