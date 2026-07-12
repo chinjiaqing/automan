@@ -78,7 +78,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     configSchema: [
       { key: 'templateImage', label: '模板图片', type: 'image-upload' },
       { key: 'threshold', label: '相似度', type: 'slider', min: 30, max: 100, default: 80 },
-      { key: 'region', label: '搜索区域', type: 'coord-input', default: [0, 0, 0, 0] },
+      { key: 'region', label: '搜索区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
     outputs: [
       { key: 'matchCount', label: '匹配数量', dataType: 'number' },
@@ -94,7 +94,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     label: '识字',
     icon: 'pi-file-edit',
     configSchema: [
-      { key: 'region', label: '识别区域', type: 'coord-input', default: [0, 0, 0, 0] },
+      { key: 'region', label: '识别区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
     outputs: [
       { key: 'text', label: '识别文本', dataType: 'string' },
@@ -111,7 +111,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     configSchema: [
       { key: 'target', label: '目标文字', type: 'text' },
       { key: 'similarity', label: '相似度', type: 'slider', min: 30, max: 100, default: 80 },
-      { key: 'region', label: '搜索区域', type: 'coord-input', default: [0, 0, 0, 0] },
+      { key: 'region', label: '搜索区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
     outputs: [
       { key: 'matchCount', label: '匹配数量', dataType: 'number' },
@@ -127,8 +127,8 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     label: '点击',
     icon: 'pi-bullseye',
     configSchema: [
-      { key: 'x', label: 'X 坐标', type: 'number', default: 0 },
-      { key: 'y', label: 'Y 坐标', type: 'number', default: 0 },
+      { key: 'x', label: 'X 坐标', type: 'data-input', default: '0' },
+      { key: 'y', label: 'Y 坐标', type: 'data-input', default: '0' },
     ],
     outputs: [],
     inputs: [
@@ -143,7 +143,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     label: '范围点击',
     icon: 'pi-objects-column',
     configSchema: [
-      { key: 'region', label: '点击区域', type: 'coord-input', default: [0, 0, 0, 0] },
+      { key: 'region', label: '点击区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
     outputs: [],
     inputs: [],
@@ -158,6 +158,19 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
       { key: 'ms', label: '延迟毫秒', type: 'number', default: 1000 },
     ],
     outputs: [],
+    inputs: [],
+    exitCount: 1,
+  },
+  {
+    type: 'randomDelay',
+    category: 'action',
+    label: '随机等待',
+    icon: 'pi-clock',
+    configSchema: [
+      { key: 'left', label: '最小值(ms)', type: 'data-input', default: '0', placeholder: '最小延迟，支持引用' },
+      { key: 'right', label: '最大值(ms)', type: 'data-input', default: '1000', placeholder: '最大延迟，支持引用' },
+    ],
+    outputs: [{ key: 'actualMs', label: '实际等待(ms)', dataType: 'number' }],
     inputs: [],
     exitCount: 1,
   },

@@ -4,7 +4,10 @@
     <aside class="flow-sidebar">
       <div class="flow-sidebar__header">
         <span class="text-sm font-semibold text-gray-700">脚本列表</span>
-        <Button size="small" icon="pi pi-plus" label="新建" @click="handleCreate" />
+        <div class="flex gap-1">
+          <Button size="small" icon="pi pi-download" label="导入" @click="handleImport" />
+          <Button size="small" icon="pi pi-plus" label="新建" @click="handleCreate" />
+        </div>
       </div>
       <nav class="flex-1 overflow-y-auto px-2 py-2">
         <div v-if="workflowList.length === 0" class="text-xs text-gray-400 text-center py-8">
@@ -38,12 +41,13 @@
             placeholder="工作流名称"
             size="small"
           />
-          <span v-if="currentWorkflowId" class="text-xs text-gray-400 select-all">
-            ID: {{ currentWorkflowId }}
-          </span>
           <div class="flex-1" />
-          <Button size="small" severity="secondary" text icon="pi pi-save" :label="hasChanges ? '保存 *' : '保存'" :disabled="!hasChanges" @click="handleSave" />
-          <Button size="small" severity="danger" text icon="pi pi-trash" label="删除" @click="handleDelete" />
+          <div class="flex gap-2 flex-shrink-0">
+            <Button size="small" severity="secondary" text icon="pi pi-copy" label="复制" @click="handleDuplicate" />
+            <Button size="small" severity="secondary" text icon="pi pi-upload" label="导出" @click="handleExport" />
+            <Button size="small" severity="secondary" text icon="pi pi-save" :label="hasChanges ? '保存 *' : '保存'" :disabled="!hasChanges" @click="handleSave" />
+            <Button size="small" severity="danger" text icon="pi pi-trash" label="删除" @click="handleDelete" />
+          </div>
         </div>
 
         <!-- Vue Flow 画布 -->
@@ -94,6 +98,9 @@
       <span class="text-sm text-gray-400">选择或新建脚本来开始编辑</span>
     </div>
 
+    <!-- 导入文件（隐藏） -->
+    <input ref="importFileRef" type="file" accept=".json" class="hidden" @change="onImportFileChange" />
+
     <!-- 新建脚本弹窗 -->
     <Dialog v-model:visible="createDialogVisible" header="新建脚本" :modal="true" :style="{ width: '360px' }">
       <div class="mb-4">
@@ -109,6 +116,24 @@
       <template #footer>
         <Button severity="secondary" text label="取消" @click="createDialogVisible = false" />
         <Button label="确定" :disabled="!createName.trim()" @click="confirmCreate" />
+      </template>
+    </Dialog>
+
+    <!-- 复制脚本弹窗 -->
+    <Dialog v-model:visible="copyDialogVisible" header="复制脚本" :modal="true" :style="{ width: '360px' }">
+      <div class="mb-4">
+        <label class="block text-sm text-gray-600 mb-1.5">新脚本名称</label>
+        <InputText
+          class="w-full"
+          v-model="copyName"
+          placeholder="请输入新脚本名称"
+          @keydown.enter="confirmDuplicate"
+          size="small"
+        />
+      </div>
+      <template #footer>
+        <Button severity="secondary" text label="取消" @click="copyDialogVisible = false" />
+        <Button label="确定" :disabled="!copyName.trim()" @click="confirmDuplicate" />
       </template>
     </Dialog>
 
@@ -163,6 +188,7 @@ const nodeTypes: Record<string, any> = {
   click: markRaw(ActionNode),
   areaClick: markRaw(ActionNode),
   delay: markRaw(ActionNode),
+  randomDelay: markRaw(ActionNode),
   variable: markRaw(DataNode),
   launchApp: markRaw(ActionNode),
   killApp: markRaw(ActionNode),
@@ -191,6 +217,13 @@ const createName = ref('')
 // ── 删除弹窗 ──
 const deleteDialogVisible = ref(false)
 const deleteTargetName = ref('')
+
+// ── 复制弹窗 ──
+const copyDialogVisible = ref(false)
+const copyName = ref('')
+
+// ── 导入文件 ──
+const importFileRef = ref<HTMLInputElement | null>(null)
 
 // ── 计算属性 ─────────────────────────────────────
 /** 选中节点的上游节点（在拓扑序中位于其前面的节点） */
@@ -446,6 +479,100 @@ async function confirmDelete() {
   }
 }
 
+// ── 复制 ────────────────────────────────────────
+function handleDuplicate() {
+  if (!currentWorkflowId.value) return
+  copyName.value = currentWorkflowName.value + generateRandomSuffix()
+  copyDialogVisible.value = true
+}
+
+async function confirmDuplicate() {
+  const name = copyName.value.trim()
+  if (!name) return
+  copyDialogVisible.value = false
+
+  // 先保存当前未保存的改动
+  if (hasChanges.value) {
+    await handleSave()
+  }
+
+  // 创建新工作流，然后覆盖当前节点/边
+  const createRes = await workflowApi.create({ name })
+  if (!createRes.success) return
+
+  const wfNodes = nodes.value.map((n) => toWfNode(n))
+  const wfEdges = edges.value.map((e) => toWfEdge(e))
+  const saveRes = await workflowApi.save(createRes.data.id, {
+    name,
+    nodes: wfNodes,
+    edges: wfEdges,
+  })
+  if (saveRes.success) {
+    await loadWorkflowList()
+    await loadWorkflow(createRes.data.id)
+  }
+}
+
+// ── 导出 ────────────────────────────────────────
+async function handleExport() {
+  if (!currentWorkflowId.value) return
+
+  // 先保存未保存的改动
+  if (hasChanges.value) {
+    await handleSave()
+  }
+
+  const res = await workflowApi.get(currentWorkflowId.value)
+  if (!res.success) return
+  const wf = res.data
+
+  const data = JSON.stringify({ name: wf.name, nodes: wf.nodes, edges: wf.edges }, null, 2)
+  const blob = new Blob([data], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${wf.name}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── 导入 ────────────────────────────────────────
+function handleImport() {
+  importFileRef.value?.click()
+}
+
+async function onImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  // 重置 input 以便再次选同一文件
+  input.value = ''
+
+  try {
+    const text = await file.text()
+    const json = JSON.parse(text) as { name?: string; nodes?: WfNode[]; edges?: any[] }
+    if (!json.name || !Array.isArray(json.nodes)) {
+      alert('无效的脚本文件：缺少 name 或 nodes')
+      return
+    }
+
+    const createRes = await workflowApi.create({ name: json.name })
+    if (!createRes.success) return
+
+    const saveRes = await workflowApi.save(createRes.data.id, {
+      name: json.name,
+      nodes: json.nodes,
+      edges: json.edges ?? [],
+    })
+    if (saveRes.success) {
+      await loadWorkflowList()
+      await loadWorkflow(createRes.data.id)
+    }
+  } catch (err) {
+    alert(`导入失败: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 function generateDataId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let suffix = ''
@@ -453,6 +580,15 @@ function generateDataId(): string {
     suffix += chars[Math.floor(Math.random() * chars.length)]
   }
   return `data_${suffix}`
+}
+
+function generateRandomSuffix(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let s = ''
+  for (let i = 0; i < 5; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return s
 }
 </script>
 
@@ -465,7 +601,7 @@ function generateDataId(): string {
 
 /* ── 左侧脚本列表 ── */
 .flow-sidebar {
-  width: 200px;
+  width: 240px;
   display: flex;
   flex-direction: column;
   background: white;

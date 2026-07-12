@@ -1,0 +1,20 @@
+feat: 数据引用算术表达式 + 随机等待节点 + 导入导出复制 + UI 优化
+
+核心功能:
+- resolveValue 支持内嵌算术表达式 ({{ref}} + 100), 递归下降解析器支持 +-*/ 和括号
+- 新增 randomDelay 节点: left~right 范围随机延迟, 输出 actualMs
+- 新增 coord-ref 字段类型: region 参数支持 {{ref}} 引用 + 解析
+- 点击节点 x/y 改为 data-input 类型, 支持引用
+- 坐标安全钳制: clampRegion/clampPoint 自动限制到 [0, maxWidth/Height]
+- 条件节点输出存储: condition.result 可被下游引用
+
+Flow 编辑器:
+- 新增导入功能: 上传 JSON 文件创建并自动选中
+- 新增导出功能: 下载 {name, nodes, edges} 格式 JSON
+- 新增复制功能: 弹窗预填原名+随机后缀, 复制全部节点并选中
+- 左侧脚本列表加宽至 240px, 导入/新建按钮 primary 样式
+- 工具栏操作按钮 flex-shrink-0 防挤压, 移除 Flow ID 显示
+
+修复:
+- API 空 body 时不再发送 Content-Type: application/json (修复 delete 报错)
+- 识图模板图片移除按钮改为红色圆形, 上传按钮改为 outlined 样式

@@ -71,6 +71,52 @@ function cleanPkgName(raw: unknown): string {
   return String(raw ?? '').replace(/^[\s:]+/, '').trim()
 }
 
+/**
+ * 解析 region 参数：支持数组格式（旧数据）和字符串格式（含引用）
+ * 字符串格式如 "0,0,100,200" 或 "{{data_left.value}},{{data_top.value}},..."
+ */
+function resolveRegion(
+  val: unknown,
+  outputs: Record<string, Record<string, unknown>>,
+): [number, number, number, number] {
+  if (Array.isArray(val) && val.length === 4) {
+    return val.map(Number) as [number, number, number, number]
+  }
+  if (typeof val === 'string') {
+    const resolved = resolveValue(val, outputs)
+    const str = String(resolved)
+    const parts = str.split(',').map((s) => Number(s.trim()))
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      return parts as [number, number, number, number]
+    }
+  }
+  return [0, 0, 0, 0]
+}
+
+/** 将坐标值限制在 [0, max] 范围内 */
+function clamp(v: number, max: number): number {
+  return Math.max(0, Math.min(max, Math.round(v)))
+}
+
+/** 安全化 region：clamp 到 [0, maxW] × [0, maxH] */
+function clampRegion(
+  r: [number, number, number, number],
+  maxW: number,
+  maxH: number,
+): [number, number, number, number] {
+  return [
+    clamp(r[0], maxW),
+    clamp(r[1], maxH),
+    clamp(r[2], maxW),
+    clamp(r[3], maxH),
+  ]
+}
+
+/** 安全化单点坐标 */
+function clampPoint(x: number, y: number, maxW: number, maxH: number): [number, number] {
+  return [clamp(x, maxW), clamp(y, maxH)]
+}
+
 export class WorkflowEngine {
   /**
    * 执行一次工作流
@@ -129,6 +175,7 @@ export class WorkflowEngine {
 
           case 'condition': {
             const result = this.evalCondition(node, ctx)
+            ctx.outputs[node.id] = { result }
             emit('debug', `条件: ${result}`)
             currentNodeId = this.followEdge(node.id, result ? 'true' : 'false', adj)
             break
@@ -170,6 +217,19 @@ export class WorkflowEngine {
             const ms = Number(node.config.ms ?? 1000)
             emit('debug', `等待 ${ms}ms`)
             await new Promise<void>((r) => setTimeout(r, ms))
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'randomDelay': {
+            const rawLeft = Number(resolveValue(node.config.left, ctx.outputs) ?? 0)
+            const rawRight = Number(resolveValue(node.config.right, ctx.outputs) ?? 1000)
+            const left = Math.max(0, Math.min(rawLeft, rawRight))
+            const right = Math.max(left, rawRight)
+            const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
+            ctx.outputs[node.id] = { actualMs }
+            emit('info', `随机等待 ${actualMs}ms (范围 ${left}~${right})`)
+            await new Promise<void>((r) => setTimeout(r, actualMs))
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
           }
@@ -352,6 +412,7 @@ export class WorkflowEngine {
             break
           case 'condition': {
             const r = this.evalCondition(innerNode, ctx)
+            ctx.outputs[innerNode.id] = { result: r }
             nodeId = this.followEdge(innerNode.id, r ? 'true' : 'false', adj)
             break
           }
@@ -378,6 +439,18 @@ export class WorkflowEngine {
           case 'delay': {
             const ms = Number(innerNode.config.ms ?? 1000)
             await new Promise<void>((r) => setTimeout(r, ms))
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'randomDelay': {
+            const rawLeft = Number(resolveValue(innerNode.config.left, ctx.outputs) ?? 0)
+            const rawRight = Number(resolveValue(innerNode.config.right, ctx.outputs) ?? 1000)
+            const left = Math.max(0, Math.min(rawLeft, rawRight))
+            const right = Math.max(left, rawRight)
+            const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
+            ctx.outputs[innerNode.id] = { actualMs }
+            emit('debug', `  loop▶ 随机等待 ${actualMs}ms (范围 ${left}~${right})`)
+            await new Promise<void>((r) => setTimeout(r, actualMs))
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           }
@@ -440,8 +513,11 @@ export class WorkflowEngine {
     const { templateImage, threshold, region } = node.config as Record<string, unknown>
     if (!templateImage) throw new Error('识图节点缺少模板图片')
 
-    // region 直接使用标准分辨率坐标（截图已是标准分辨率，无需转换）
-    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
+    const searchRegion = clampRegion(
+      resolveRegion(region, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
 
     const templateStr = String(templateImage)
     const result = await findPicPro({
@@ -483,8 +559,11 @@ export class WorkflowEngine {
   /** OCR 识字节点 */
   private async execOcrWords(node: WorkflowNode, ctx: EngineContext): Promise<void> {
     const { region } = node.config as Record<string, unknown>
-    // region 直接使用标准分辨率坐标
-    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
+    const searchRegion = clampRegion(
+      resolveRegion(region, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
     const result = await getWords({
       image: ctx.screenshot,
       region: searchRegion,
@@ -498,8 +577,11 @@ export class WorkflowEngine {
     const { target, similarity, region } = node.config as Record<string, unknown>
     if (!target) throw new Error('找字节点缺少目标文字')
 
-    // region 直接使用标准分辨率坐标
-    const searchRegion = (region as [number, number, number, number]) ?? [0, 0, 0, 0]
+    const searchRegion = clampRegion(
+      resolveRegion(region, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
 
     const result = await findStr({
       image: ctx.screenshot,
@@ -537,8 +619,9 @@ export class WorkflowEngine {
 
   /** 点击节点 */
   private async execClick(node: WorkflowNode, ctx: EngineContext): Promise<void> {
-    const x = Number(node.config.x ?? 0)
-    const y = Number(node.config.y ?? 0)
+    const rawX = Number(resolveValue(node.config.x, ctx.outputs) ?? 0)
+    const rawY = Number(resolveValue(node.config.y, ctx.outputs) ?? 0)
+    const [x, y] = clampPoint(rawX, rawY, ctx.screenshotWidth, ctx.screenshotHeight)
     await adbClick(ctx.adbPath, ctx.adbTarget, [x, y])
     ctx.annotations.push({
       type: 'click',
@@ -550,7 +633,11 @@ export class WorkflowEngine {
 
   /** 范围点击节点 */
   private async execAreaClick(node: WorkflowNode, ctx: EngineContext): Promise<void> {
-    const region = (node.config.region as [number, number, number, number]) ?? [0, 0, 0, 0]
+    const region = clampRegion(
+      resolveRegion(node.config.region, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
     await adbAreaClick(ctx.adbPath, ctx.adbTarget, region)
     const cx = Math.round((region[0] + region[2]) / 2)
     const cy = Math.round((region[1] + region[3]) / 2)

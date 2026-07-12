@@ -85,7 +85,7 @@
             @update:modelValue="setConfig(field.key, $event)"
           />
 
-          <!-- coord-input -->
+          <!-- coord-input (纯坐标，无引用) -->
           <InputText
             v-else-if="field.type === 'coord-input'"
             class="w-full"
@@ -95,32 +95,39 @@
             @input="setConfig(field.key, parseCoord(($event.target as HTMLInputElement).value))"
           />
 
+          <!-- coord-ref (坐标 + 引用，支持 {{ref}}) -->
+          <DataRefInput
+            v-else-if="field.type === 'coord-ref'"
+            :value="formatCoordStr(getConfig(field.key))"
+            :placeholder="field.placeholder ?? 'x1,y1,x2,y2'"
+            :upstream-nodes="upstreamNodes"
+            @update:modelValue="setConfig(field.key, $event)"
+          />
+
           <!-- image-upload -->
           <div v-else-if="field.type === 'image-upload'" class="config-panel__field">
             <!-- 已上传图片预览 -->
-            <div v-if="getConfig(field.key)" class="mb-1.5 relative inline-block">
+            <div v-if="getConfig(field.key)" class="mb-1.5 relative inline-block overflow-visible">
               <img
                 :src="getConfig(field.key) as string"
                 class="block rounded border border-gray-200"
                 style="max-width: 100%; max-height: 80px;"
               />
-              <Button
-                text
-                rounded
-                severity="secondary"
-                size="small"
-                icon="pi pi-times"
-                class="absolute -top-1.5 -right-1.5"
+              <button
+                class="img-remove-btn"
                 title="移除图片"
                 @click.stop="setConfig(field.key, '')"
-              />
+              >
+                <i class="pi pi-times" style="font-size: 10px;" />
+              </button>
             </div>
             <Button
-              text
+              outlined
               severity="secondary"
               size="small"
-              class="w-full border border-dashed border-gray-300"
+              class="w-full"
               :label="getConfig(field.key) ? '点击替换' : '点击上传模板图片'"
+              :icon="getConfig(field.key) ? 'pi pi-pencil' : 'pi pi-upload'"
               @click="handleImageUpload(field.key)"
             />
             <input
@@ -216,6 +223,13 @@ function formatCoord(val: unknown): string {
   return '0,0,0,0'
 }
 
+/** coord-ref 显示值：兼容旧数组格式和新字符串格式 */
+function formatCoordStr(val: unknown): string {
+  if (typeof val === 'string') return val
+  if (Array.isArray(val) && val.length === 4) return val.join(',')
+  return '0,0,0,0'
+}
+
 function parseCoord(str: string): number[] {
   const parts = str.split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n))
   return parts.length === 4 ? parts : [0, 0, 0, 0]
@@ -281,5 +295,29 @@ function onFileChange(event: Event, key: string) {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid #f3f4f6;
+}
+
+.img-remove-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  border: 2px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: background 0.15s;
+  z-index: 1;
+}
+
+.img-remove-btn:hover {
+  background: #dc2626;
 }
 </style>

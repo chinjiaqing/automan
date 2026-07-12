@@ -3,30 +3,112 @@
 // ─────────────────────────────────────────────
 
 /**
+ * 简单算术表达式求值器
+ * 支持 +, -, *, / 和括号，遵循标准运算符优先级
+ * 仅允许数字、运算符和空白字符，返回 NaN 表示非算术表达式
+ */
+function evalArithmetic(expr: string): number {
+  const s = expr.trim()
+  if (!s) return NaN
+
+  // 安全检查：只允许数字、运算符、括号、小数点、空白
+  if (!/^[\d\s+\-*/().]+$/.test(s)) return NaN
+
+  let pos = 0
+
+  function skipSpaces() {
+    while (pos < s.length && s[pos] === ' ') pos++
+  }
+
+  function parseExpr(): number {
+    let left = parseTerm()
+    skipSpaces()
+    while (pos < s.length && (s[pos] === '+' || s[pos] === '-')) {
+      const op = s[pos++]
+      const right = parseTerm()
+      left = op === '+' ? left + right : left - right
+      skipSpaces()
+    }
+    return left
+  }
+
+  function parseTerm(): number {
+    let left = parseUnary()
+    skipSpaces()
+    while (pos < s.length && (s[pos] === '*' || s[pos] === '/')) {
+      const op = s[pos++]
+      const right = parseUnary()
+      left = op === '*' ? left * right : (right === 0 ? 0 : left / right)
+      skipSpaces()
+    }
+    return left
+  }
+
+  function parseUnary(): number {
+    skipSpaces()
+    if (s[pos] === '-') {
+      pos++
+      return -parsePrimary()
+    }
+    if (s[pos] === '+') {
+      pos++
+      return parsePrimary()
+    }
+    return parsePrimary()
+  }
+
+  function parsePrimary(): number {
+    skipSpaces()
+    if (s[pos] === '(') {
+      pos++ // skip (
+      const result = parseExpr()
+      if (s[pos] === ')') pos++ // skip )
+      return result
+    }
+    let num = ''
+    while (pos < s.length && (s[pos] >= '0' && s[pos] <= '9' || s[pos] === '.')) {
+      num += s[pos++]
+    }
+    return num.length > 0 ? Number(num) : NaN
+  }
+
+  const result = parseExpr()
+  skipSpaces()
+  // 必须消耗完所有字符才算有效算术表达式
+  return pos >= s.length ? result : NaN
+}
+
+/**
  * 解析单个值，将 {{nodeId.key}} 替换为 context 中的实际值
+ * 支持内嵌算术表达式，如 "{{ref}} + 100"
  * @param value 待解析的值
  * @param outputs 节点输出映射 { [nodeId]: { [key]: value } }
  */
 export function resolveValue(value: unknown, outputs: Record<string, Record<string, unknown>>): unknown {
   if (typeof value !== 'string') return value
 
-  // 完整引用 {{nodeId.key}} → 返回原始类型
+  // 完整引用 {{nodeId.key}} → 返回原始类型（不做算术）
   const fullMatch = /^\{\{([^{}.]+)\.([^{}.]+)\}\}$/.exec(value)
   if (fullMatch) {
     const [, nodeId, key] = fullMatch
     return outputs[nodeId]?.[key] ?? value
   }
 
-  // 内嵌引用 → 字符串替换
+  // 内嵌引用 → 字符串替换，再尝试算术求值
   if (value.includes('{{')) {
-    const result = value.replace(
+    const replaced = value.replace(
       /\{\{([^{}.]+)\.([^{}.]+)\}\}/g,
       (_, nodeId, key) => {
         const v = outputs[nodeId]?.[key]
         return v !== undefined ? String(v) : `{{${nodeId}.${key}}}`
       },
     )
-    return result
+    // 如果仍有未解析的引用，直接返回字符串
+    if (replaced.includes('{{')) return replaced
+    // 尝试算术求值："100 + 100" → 200
+    const num = evalArithmetic(replaced)
+    if (!isNaN(num)) return num
+    return replaced
   }
 
   // 纯数字字符串 → 自动转换

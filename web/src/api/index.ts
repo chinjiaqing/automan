@@ -16,11 +16,15 @@ async function request<T>(
   path: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
   const opts: RequestInit = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
   }
-  if (body) {
+  if (body !== undefined) {
     opts.body = JSON.stringify(body)
   }
 

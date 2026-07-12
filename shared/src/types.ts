@@ -393,7 +393,7 @@ export interface AdbClickResponse {
 export interface FieldSchema {
   key: string
   label: string
-  type: 'text' | 'number' | 'select' | 'slider' | 'image-upload' | 'coord-input' | 'data-ref' | 'data-input' | 'data-source'
+  type: 'text' | 'number' | 'select' | 'slider' | 'image-upload' | 'coord-input' | 'coord-ref' | 'data-ref' | 'data-input' | 'data-source'
   default?: unknown
   options?: string[]
   min?: number
