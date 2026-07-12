@@ -4,8 +4,8 @@
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
-import { db, workflows, deviceWorkflowChecks } from '../db/index.js'
-import { eq } from 'drizzle-orm'
+import { db, workflows, deviceWorkflowChecks, workflowRunConfigs } from '../db/index.js'
+import { eq, and } from 'drizzle-orm'
 import type {
   CreateWorkflowRequest,
   SaveWorkflowRequest,
@@ -17,6 +17,8 @@ import type {
   BatchRunWorkflowRequest,
   SaveCheckedWorkflowsRequest,
   CheckedWorkflowsSnapshot,
+  SaveRunConfigRequest,
+  WorkflowRunConfig,
 } from '@automan/shared/types.js'
 import type { WorkflowService } from '../modules/workflow/service.js'
 
@@ -56,10 +58,9 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
       const now = Date.now()
       const id = crypto.randomUUID()
 
-      // 初始节点：start + end
+      // 初始节点：仅固定开始节点
       const defaultNodes: WorkflowNode[] = [
         { id: 'start_1', type: 'start', label: '开始', position: { x: 250, y: 50 }, config: {} },
-        { id: 'end_1', type: 'end', label: '结束', position: { x: 250, y: 400 }, config: {} },
       ]
 
       db.insert(workflows)
@@ -293,4 +294,80 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
     const { deviceId } = request.params
     return { success: true as const, data: workflowService.getDeviceRunStatus(deviceId) }
   })
+
+  // ── 保存运行配置（upsert）──────────────────────
+  app.post<{ Body: SaveRunConfigRequest }>(
+    '/api/workflows/run-config',
+    async (request, reply) => {
+      const { deviceId, workflowId, triggerMode, scheduleTimes, maxSuccessCount, maxFailCount } = request.body
+      if (!deviceId || !workflowId) {
+        return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 和 workflowId 为必填' })
+      }
+
+      const config: WorkflowRunConfig = {
+        workflowId,
+        deviceId,
+        triggerMode: triggerMode ?? 'immediate',
+        scheduleTimes: scheduleTimes ?? [],
+        maxSuccessCount: maxSuccessCount ?? 0,
+        maxFailCount: maxFailCount ?? 0,
+      }
+
+      const now = Date.now()
+      const existing = db.select().from(workflowRunConfigs)
+        .where(and(eq(workflowRunConfigs.deviceId, deviceId), eq(workflowRunConfigs.workflowId, workflowId)))
+        .get()
+
+      if (existing) {
+        db.update(workflowRunConfigs)
+          .set({ configJson: JSON.stringify(config), updatedAt: now })
+          .where(and(eq(workflowRunConfigs.deviceId, deviceId), eq(workflowRunConfigs.workflowId, workflowId)))
+          .run()
+      } else {
+        db.insert(workflowRunConfigs)
+          .values({ id: crypto.randomUUID(), deviceId, workflowId, configJson: JSON.stringify(config), updatedAt: now })
+          .run()
+      }
+
+      return { success: true as const, data: config }
+    },
+  )
+
+  // ── 查询单个运行配置 ───────────────────────────
+  app.get<{ Params: { deviceId: string; workflowId: string } }>(
+    '/api/workflows/run-config/:deviceId/:workflowId',
+    async (request) => {
+      const { deviceId, workflowId } = request.params
+      const row = db.select().from(workflowRunConfigs)
+        .where(and(eq(workflowRunConfigs.deviceId, deviceId), eq(workflowRunConfigs.workflowId, workflowId)))
+        .get()
+
+      if (!row) {
+        const defaultConfig: WorkflowRunConfig = {
+          workflowId,
+          deviceId,
+          triggerMode: 'immediate',
+          scheduleTimes: [],
+          maxSuccessCount: 0,
+          maxFailCount: 0,
+        }
+        return { success: true as const, data: defaultConfig }
+      }
+
+      return { success: true as const, data: JSON.parse(row.configJson) as WorkflowRunConfig }
+    },
+  )
+
+  // ── 查询设备下所有运行配置 ─────────────────────────
+  app.get<{ Params: { deviceId: string } }>(
+    '/api/workflows/run-configs/:deviceId',
+    async (request) => {
+      const { deviceId } = request.params
+      const rows = db.select().from(workflowRunConfigs)
+        .where(eq(workflowRunConfigs.deviceId, deviceId))
+        .all()
+      const configs = rows.map((row) => JSON.parse(row.configJson) as WorkflowRunConfig)
+      return { success: true as const, data: configs }
+    },
+  )
 }

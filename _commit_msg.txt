@@ -1,3 +1,15 @@
+feat: 工作流运行配置体系 + 状态机 + UX 增强
+
+- 新增运行配置（触发方式/定时调度/停止条件）+ DB 表 + API CRUD
+- CronManager 动态定时调度（node-cron）
+- WorkflowActor 6 态状态机 + 成功/失败计数 + 自动停止
+- 三值成功语义：endSuccess(true) / endFail(false) / end(undefined)
+- autoPending 修复定时模式 neutral end 卡死问题
+- 新增 endSuccess/endFail 流程节点组件
+- WorkflowListPanel 配置表单 + Toast 保存反馈
+- ExecutionViewer 画布点击触发模拟器 ADB 点击（含坐标转换）
+- 全局 PrimeVue Toast 服务
+- 新建 flow 仅固定开始节点
 feat: 数据引用算术表达式 + 随机等待节点 + 导入导出复制 + UI 优化
 
 核心功能:

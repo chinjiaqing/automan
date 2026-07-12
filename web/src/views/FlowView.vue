@@ -164,6 +164,8 @@ import NodePalette from '../components/flow/NodePalette.vue'
 import ConfigPanel from '../components/flow/ConfigPanel.vue'
 import StartNode from '../components/flow/nodes/StartNode.vue'
 import EndNode from '../components/flow/nodes/EndNode.vue'
+import EndSuccessNode from '../components/flow/nodes/EndSuccessNode.vue'
+import EndFailNode from '../components/flow/nodes/EndFailNode.vue'
 import ConditionNode from '../components/flow/nodes/ConditionNode.vue'
 import LoopNode from '../components/flow/nodes/LoopNode.vue'
 import ActionNode from '../components/flow/nodes/ActionNode.vue'
@@ -180,6 +182,8 @@ const { addNodes, addEdges, project } = useVueFlow()
 const nodeTypes: Record<string, any> = {
   start: markRaw(StartNode),
   end: markRaw(EndNode),
+  endSuccess: markRaw(EndSuccessNode),
+  endFail: markRaw(EndFailNode),
   condition: markRaw(ConditionNode),
   loop: markRaw(LoopNode),
   findPic: markRaw(ActionNode),
@@ -298,7 +302,7 @@ function toFlowNode(n: WfNode): any {
       config: n.config ?? {},
       selected: false,
     },
-    deletable: n.type !== 'start' && n.type !== 'end',
+    deletable: n.type !== 'start',
     draggable: true,
   }
 }
@@ -395,7 +399,7 @@ function onDrop(event: DragEvent) {
       config: defaultConfig,
       selected: false,
     },
-    deletable: nodeType !== 'start' && nodeType !== 'end',
+    deletable: nodeType !== 'start',
   }
 
   addNodes([newNode])

@@ -15,13 +15,22 @@
           <!-- 展开箭头 -->
           <Button text rounded severity="secondary" size="small" :icon="expandedId === wf.id ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" @click="toggleExpand(wf.id)" />
 
-          <!-- 标题（点击跳转到编辑器） -->
+          <!-- 标题（点击展开配置） -->
           <button
             class="flex-1 text-sm text-left truncate hover:text-brand-600 transition-colors bg-transparent border-none cursor-pointer"
             @click="toggleExpand(wf.id)"
           >
             {{ wf.name }}
           </button>
+
+          <!-- 运行状态标签 -->
+          <span
+            v-if="getFlowState(wf.id) && getFlowState(wf.id) !== 'idle'"
+            class="text-xs px-1.5 py-0.5 rounded-full"
+            :class="flowStateClass(getFlowState(wf.id)!)"
+          >
+            {{ flowStateLabel(getFlowState(wf.id)!) }}
+          </span>
 
           <!-- Switch 开关 -->
           <button
@@ -36,12 +45,76 @@
         </div>
 
         <!-- 展开配置区 -->
-        <div v-if="expandedId === wf.id" class="ml-6 mr-2 mb-2 px-2 py-2 bg-gray-50 rounded text-xs space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="text-gray-500 w-16">触发方式</span>
-            <Select :options="['每次截图']" model-value="每次截图" class="flex-1" size="small" />
+        <div v-if="expandedId === wf.id" class="ml-6 mr-2 mb-2 px-3 py-3 bg-gray-50 rounded text-xs space-y-3">
+          <!-- 触发方式 -->
+          <div class="space-y-1">
+            <label class="text-gray-500 font-medium">触发方式</label>
+            <Select
+              v-model="configForm.triggerMode"
+              :options="triggerOptions"
+              option-label="label"
+              option-value="value"
+              class="w-full"
+              size="small"
+            />
           </div>
-          <div class="text-gray-400 text-center py-1">更多配置待扩展</div>
+
+          <!-- 定时配置（仅 scheduled 模式显示） -->
+          <div v-if="configForm.triggerMode === 'scheduled'" class="space-y-2">
+            <label class="text-gray-500 font-medium">定时时间</label>
+            <div v-for="(d, idx) in configForm.scheduleDates" :key="idx" class="flex items-center gap-2">
+              <DatePicker
+                v-model="configForm.scheduleDates[idx]"
+                time-only
+                hour-format="24"
+                show-icon
+                class="flex-1"
+                size="small"
+                :step-minute="1"
+              />
+              <Button icon="pi pi-times" severity="danger" text size="small" rounded @click="removeTime(idx)" />
+            </div>
+            <Button label="添加时间" icon="pi pi-plus" severity="secondary" text size="small" @click="addTime" />
+          </div>
+
+          <!-- 成功停止条件 -->
+          <div class="space-y-1">
+            <label class="text-gray-500 font-medium">成功N次后停止</label>
+            <InputNumber
+              v-model="configForm.maxSuccessCount"
+              :min="0"
+              :use-grouping="false"
+              class="w-full"
+              size="small"
+              placeholder="不限制"
+            />
+            <div v-if="configForm.maxSuccessCount === 0" class="text-xs text-gray-400">当前不限制，达到指定次数后自动停止</div>
+          </div>
+
+          <!-- 失败停止条件 -->
+          <div class="space-y-1">
+            <label class="text-gray-500 font-medium">失败N次后停止</label>
+            <InputNumber
+              v-model="configForm.maxFailCount"
+              :min="0"
+              :use-grouping="false"
+              class="w-full"
+              size="small"
+              placeholder="不限制"
+            />
+            <div v-if="configForm.maxFailCount === 0" class="text-xs text-gray-400">当前不限制，达到指定次数后自动停止</div>
+          </div>
+
+          <!-- 运行计数显示 -->
+          <div v-if="getFlowState(wf.id)" class="flex gap-3 text-gray-400">
+            <span>成功: {{ getCounts(wf.id).success }}</span>
+            <span>失败: {{ getCounts(wf.id).fail }}</span>
+          </div>
+
+          <!-- 保存按钮 -->
+          <div class="flex justify-end">
+            <Button label="保存配置" icon="pi pi-check" size="small" :loading="savingConfig" @click="saveConfig(wf.id)" />
+          </div>
         </div>
       </div>
     </nav>
@@ -49,19 +122,90 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, reactive } from 'vue'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
-import type { Workflow } from '@automan/shared/types.js'
+import InputNumber from 'primevue/inputnumber'
+import DatePicker from 'primevue/datepicker'
+import { useToast } from 'primevue/usetoast'
+import type { Workflow, WorkflowRunConfig, FlowState } from '@automan/shared/types.js'
 import { workflowApi } from '../api/workflow.js'
 import { useWorkflowRun } from '../composables/useWorkflowRun.js'
 
 const props = defineProps<{ deviceId: string }>()
 
-const { toggleCheck, isChecked, isRunning } = useWorkflowRun()
+const { toggleCheck, isChecked, isRunning, workflowFlowStateMap } = useWorkflowRun()
+const toast = useToast()
 
 const workflows = ref<Workflow[]>([])
 const expandedId = ref('')
+const savingConfig = ref(false)
+
+/** 每个工作流的运行配置缓存 */
+const configCache = ref<Map<string, WorkflowRunConfig>>(new Map())
+
+/** 配置表单 */
+const configForm = reactive<{
+  triggerMode: 'immediate' | 'scheduled'
+  /** 时间选择器的 Date 数组（UI 绑定用） */
+  scheduleDates: Date[]
+  maxSuccessCount: number
+  maxFailCount: number
+}>({
+  triggerMode: 'immediate',
+  scheduleDates: [],
+  maxSuccessCount: 0,
+  maxFailCount: 0,
+})
+
+const triggerOptions = [
+  { label: '每次截图', value: 'immediate' },
+  { label: '定时触发', value: 'scheduled' },
+]
+
+function getFlowState(workflowId: string): FlowState | undefined {
+  return workflowFlowStateMap.value.get(workflowId)?.flowState as FlowState | undefined
+}
+
+function getCounts(workflowId: string): { success: number; fail: number } {
+  const entry = workflowFlowStateMap.value.get(workflowId)
+  return { success: entry?.successCount ?? 0, fail: entry?.failCount ?? 0 }
+}
+
+function flowStateLabel(state: FlowState): string {
+  const map: Record<FlowState, string> = {
+    idle: '空闲',
+    pending: '等待中',
+    processing: '执行中',
+    success: '成功',
+    fail: '失败',
+    completed: '已完成',
+  }
+  return map[state]
+}
+
+function flowStateClass(state: FlowState): string {
+  const map: Record<FlowState, string> = {
+    idle: 'bg-gray-100 text-gray-500',
+    pending: 'bg-yellow-100 text-yellow-700',
+    processing: 'bg-blue-100 text-blue-700',
+    success: 'bg-green-100 text-green-700',
+    fail: 'bg-red-100 text-red-700',
+    completed: 'bg-purple-100 text-purple-700',
+  }
+  return map[state]
+}
+
+function addTime() {
+  // 默认添加到今天 09:00
+  const d = new Date()
+  d.setHours(9, 0, 0, 0)
+  configForm.scheduleDates.push(d)
+}
+
+function removeTime(idx: number) {
+  configForm.scheduleDates.splice(idx, 1)
+}
 
 async function loadWorkflows() {
   const res = await workflowApi.list()
@@ -70,8 +214,64 @@ async function loadWorkflows() {
   }
 }
 
+/** 展开时加载配置 */
+async function loadRunConfig(workflowId: string) {
+  try {
+    const res = await workflowApi.getRunConfig(props.deviceId, workflowId)
+    if (res.success && res.data) {
+      const cfg = res.data
+      configCache.value.set(workflowId, cfg)
+      configForm.triggerMode = cfg.triggerMode
+      configForm.scheduleDates = cfg.scheduleTimes.length > 0
+        ? cfg.scheduleTimes.map((t) => {
+            const d = new Date()
+            d.setHours(t.hour, t.minute, 0, 0)
+            return d
+          })
+        : []
+      configForm.maxSuccessCount = cfg.maxSuccessCount
+      configForm.maxFailCount = cfg.maxFailCount
+    } else {
+      // 无配置，重置默认
+      configForm.triggerMode = 'immediate'
+      configForm.scheduleDates = []
+      configForm.maxSuccessCount = 0
+      configForm.maxFailCount = 0
+    }
+  } catch {
+    configForm.triggerMode = 'immediate'
+    configForm.scheduleDates = []
+    configForm.maxSuccessCount = 0
+    configForm.maxFailCount = 0
+  }
+}
+
+async function saveConfig(workflowId: string) {
+  savingConfig.value = true
+  try {
+    await workflowApi.saveRunConfig({
+      deviceId: props.deviceId,
+      workflowId,
+      triggerMode: configForm.triggerMode,
+      scheduleTimes: configForm.scheduleDates.map((d) => ({ hour: d.getHours(), minute: d.getMinutes() })),
+      maxSuccessCount: configForm.maxSuccessCount,
+      maxFailCount: configForm.maxFailCount,
+    })
+    toast.add({ severity: 'success', summary: '保存成功', detail: '工作流运行配置已更新', life: 3000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: '保存失败', detail: err instanceof Error ? err.message : '网络异常', life: 5000 })
+  } finally {
+    savingConfig.value = false
+  }
+}
+
 function toggleExpand(id: string) {
-  expandedId.value = expandedId.value === id ? '' : id
+  if (expandedId.value === id) {
+    expandedId.value = ''
+  } else {
+    expandedId.value = id
+    loadRunConfig(id)
+  }
 }
 
 watch(() => props.deviceId, () => {

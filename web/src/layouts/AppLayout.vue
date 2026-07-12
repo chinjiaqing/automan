@@ -4,12 +4,14 @@
     <main class="flex-1 overflow-hidden">
       <router-view />
     </main>
+    <Toast />
   </div>
 </template>
 
 <script setup lang="ts">
 import { watch } from 'vue'
 import { useRouter } from 'vue-router'
+import Toast from 'primevue/toast'
 import { useWebSocket } from '../composables/useWebSocket.js'
 import AppHeader from '../components/AppHeader.vue'
 

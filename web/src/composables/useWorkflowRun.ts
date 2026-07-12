@@ -42,6 +42,9 @@ const annotationMap = ref<Map<string, { annotations: WorkflowVisualPayload['anno
 /** 设备运行状态映射（WS 实时 + REST 恢复） */
 const deviceRunStatusMap = ref<Map<string, DeviceRunStatusInfo>>(new Map())
 
+/** 每个工作流的 flowState + 计数（来自 WS WORKFLOW_STATUS 推送） */
+const workflowFlowStateMap = ref<Map<string, { flowState: string; successCount: number; failCount: number }>>(new Map())
+
 let timer: ReturnType<typeof setInterval> | null = null
 const { on, off } = useWebSocket()
 
@@ -66,6 +69,17 @@ function onWorkflowStatus(payload: unknown) {
   const p = payload as WorkflowStatusPayload
   const stateLabel = p.state === 'running' ? '执行中' : p.state === 'error' ? '出错' : '空闲'
   appendLog(p.state === 'error' ? 'error' : 'info', `[${p.workflowId.slice(0, 8)}] #${p.executionCount} ${stateLabel}`)
+
+  // 更新 flowState 计数
+  if (p.flowState) {
+    const m = new Map(workflowFlowStateMap.value)
+    m.set(p.workflowId, {
+      flowState: p.flowState,
+      successCount: p.successCount ?? 0,
+      failCount: p.failCount ?? 0,
+    })
+    workflowFlowStateMap.value = m
+  }
 }
 
 function onDeviceScreenshot(payload: unknown) {
@@ -337,6 +351,7 @@ export function useWorkflowRun() {
     screenshotMap,
     annotationMap,
     deviceRunStatusMap: readonly(deviceRunStatusMap),
+    workflowFlowStateMap: readonly(workflowFlowStateMap),
     formatElapsed,
     getCheckedCount,
     toggleCheck,

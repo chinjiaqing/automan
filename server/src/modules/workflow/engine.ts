@@ -53,7 +53,8 @@ export interface EngineContext {
 
 /** 单次执行结果 */
 export interface ExecutionResult {
-  success: boolean
+  /** true=显式成功, false=显式失败, undefined=中性结束（不计入成功/失败计数） */
+  success: boolean | undefined
   variables: Record<string, unknown>
   outputSummary: Record<string, Record<string, unknown>>
   error?: string
@@ -166,7 +167,13 @@ export class WorkflowEngine {
             break
 
           case 'end':
+            return { success: undefined, variables: ctx.variables, outputSummary: ctx.outputs, stepsExecuted: steps }
+
+          case 'endSuccess':
             return { success: true, variables: ctx.variables, outputSummary: ctx.outputs, stepsExecuted: steps }
+
+          case 'endFail':
+            return { success: false, variables: ctx.variables, outputSummary: ctx.outputs, error: '流程显式标记失败', stepsExecuted: steps }
 
           case 'variable':
             this.execVariable(node, ctx)
@@ -495,6 +502,10 @@ export class WorkflowEngine {
             break
           }
           case 'end':
+            return { nextNodeId: undefined, steps }
+          case 'endSuccess':
+            return { nextNodeId: undefined, steps }
+          case 'endFail':
             return { nextNodeId: undefined, steps }
           default:
             nodeId = this.followEdge(innerNode.id, undefined, adj)

@@ -1,8 +1,14 @@
 <template>
-  <div class="exec-viewer flex flex-col bg-gray-100">
+  <div class="exec-viewer relative flex flex-col bg-gray-100">
+    <!-- 左上角提示文案 -->
+    <div class="absolute top-1.5 left-2 z-10 text-xs text-gray-400 leading-tight pointer-events-none select-none">
+      <div>每2秒刷新</div>
+      <div>点击图片和操作模拟器</div>
+    </div>
     <!-- 截图 + 注解叠加层 -->
-    <div v-if="screenshot" ref="canvasRef" class="exec-viewer__canvas relative select-none mx-auto">
+    <div v-if="screenshot" ref="canvasRef" class="exec-viewer__canvas relative select-none mx-auto" @click="onCanvasClick">
       <img
+        ref="imgRef"
         :src="screenshot.image"
         class="block w-full"
         style="user-select: none; -webkit-user-drag: none;"
@@ -64,6 +70,17 @@
         </template>
       </template>
       </template>
+
+      <!-- 用户点击反馈波纹 -->
+      <template v-if="clickFeedback">
+        <div
+          class="exec-ann exec-ann--click"
+          :style="pointStyle(clickFeedback.x, clickFeedback.y)"
+        >
+          <span class="exec-ann__ripple" />
+          <span class="exec-ann__ripple exec-ann__ripple--delay" />
+        </div>
+      </template>
     </div>
 
     <!-- 无截图占位 -->
@@ -78,7 +95,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue'
+import { useToast } from 'primevue/usetoast'
 import type { VisualAnnotation } from '@automan/shared/types.js'
+import { deviceApi } from '../api/device.js'
 
 interface ScreenshotInfo {
   image: string
@@ -96,10 +115,20 @@ interface AnnotationInfo {
 const props = defineProps<{
   screenshot: ScreenshotInfo | null
   annotations: AnnotationInfo | null
+  deviceId?: string
 }>()
+
+const toast = useToast()
 
 /** 画布容器引用 */
 const canvasRef = ref<HTMLElement | null>(null)
+
+/** 图片元素引用（用于精确坐标转换） */
+const imgRef = ref<HTMLImageElement | null>(null)
+
+/** 用户点击反馈坐标（截图坐标系） */
+const clickFeedback = ref<{ x: number; y: number } | null>(null)
+let clickFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 图片显示尺寸 */
 const displayW = ref(0)
@@ -179,6 +208,50 @@ function areaStyle(region: number[]): CSSProperties {
     top: `${y1 * sy.value}px`,
     width: `${(x2 - x1) * sx.value}px`,
     height: `${(y2 - y1) * sy.value}px`,
+  }
+}
+
+/**
+ * 画布点击事件处理
+ * 将显示像素坐标转换为截图坐标，并调用 ADB 点击接口
+ * 处理 object-fit: contain 可能产生的 letterbox 偏移
+ */
+async function onCanvasClick(event: MouseEvent) {
+  if (!props.deviceId || !props.screenshot || !canvasRef.value || !imgRef.value) return
+
+  // 1. 获取 img 元素在 canvas 容器内的实际显示区域
+  const canvasRect = canvasRef.value.getBoundingClientRect()
+  const imgRect = imgRef.value.getBoundingClientRect()
+
+  // 2. 计算点击相对于 img 内容区域的偏移
+  //    （imgRect 已反映 object-fit: contain 的居中偏移）
+  const relX = event.clientX - imgRect.left
+  const relY = event.clientY - imgRect.top
+
+  // 3. 点击在图片范围外则忽略
+  if (relX < 0 || relX > imgRect.width || relY < 0 || relY > imgRect.height) return
+
+  // 4. 转换为截图坐标系
+  const realX = Math.round(relX / imgRect.width * props.screenshot.width)
+  const realY = Math.round(relY / imgRect.height * props.screenshot.height)
+
+  // 5. 显示点击反馈波纹
+  clickFeedback.value = { x: realX, y: realY }
+  if (clickFeedbackTimer) clearTimeout(clickFeedbackTimer)
+  clickFeedbackTimer = setTimeout(() => {
+    clickFeedback.value = null
+  }, 1200)
+
+  // 6. 调用 ADB 点击
+  try {
+    const res = await deviceApi.click({ deviceId: props.deviceId, point: [realX, realY] })
+    if (res.success) {
+      toast.add({ severity: 'info', summary: `点击 (${realX}, ${realY})`, life: 1500 })
+    } else {
+      toast.add({ severity: 'warn', summary: '点击失败', detail: (res as any).message ?? '', life: 3000 })
+    }
+  } catch (err) {
+    toast.add({ severity: 'error', summary: '点击请求失败', detail: err instanceof Error ? err.message : String(err), life: 3000 })
   }
 }
 </script>

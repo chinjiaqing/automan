@@ -11,6 +11,8 @@ import type {
   SaveCheckedWorkflowsRequest,
   CheckedWorkflowsSnapshot,
   DeviceRunStatusInfo,
+  SaveRunConfigRequest,
+  WorkflowRunConfig,
 } from '@automan/shared/types.js'
 
 export const workflowApi = {
@@ -61,4 +63,16 @@ export const workflowApi = {
   /** 查询所有设备运行状态 */
   getDeviceStatuses: () =>
     api.get<DeviceRunStatusInfo[]>('/api/workflows/device-status'),
+
+  /** 保存运行配置（upsert） */
+  saveRunConfig: (data: SaveRunConfigRequest) =>
+    api.post<WorkflowRunConfig>('/api/workflows/run-config', data),
+
+  /** 查询单个运行配置 */
+  getRunConfig: (deviceId: string, workflowId: string) =>
+    api.get<WorkflowRunConfig>(`/api/workflows/run-config/${deviceId}/${workflowId}`),
+
+  /** 查询设备下所有运行配置 */
+  getRunConfigs: (deviceId: string) =>
+    api.get<WorkflowRunConfig[]>(`/api/workflows/run-configs/${deviceId}`),
 }

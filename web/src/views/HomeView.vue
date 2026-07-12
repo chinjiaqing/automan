@@ -53,7 +53,7 @@
           @clear="clearLogs"
         >
           <!-- 实时看板：在操作按钮下方、日志上方 -->
-          <ExecutionViewer :screenshot="deviceScreenshot" :annotations="deviceAnnotations" />
+          <ExecutionViewer :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" />
         </LogPanel>
       </div>
     </template>

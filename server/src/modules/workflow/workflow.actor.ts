@@ -1,11 +1,12 @@
 // ─────────────────────────────────────────────
 // WorkflowActor — 工作流运行 Actor
 // 职责：订阅截图事件 → 调用引擎执行 → busy 锁防并发
+//       支持立即/定时触发模式 + 成功/失败计数 + 自动停止
 // ─────────────────────────────────────────────
 
 import { ActorBase } from '../actor/actor.base.js'
-import type { Workflow } from '@automan/shared/types.js'
-import { WorkflowEngine, type EngineContext } from './engine.js'
+import type { Workflow, WorkflowRunConfig, FlowState } from '@automan/shared/types.js'
+import { WorkflowEngine, type EngineContext, type ExecutionResult } from './engine.js'
 import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 import type { ScreenshotEvent } from './screenshot.dispatcher.js'
 import type { VisualAnnotation } from '@automan/shared/types.js'
@@ -20,6 +21,8 @@ export interface WorkflowActorConfig {
   ldconsolePath: string
   instanceIndex: number
   session: DeviceSession
+  /** 运行配置（触发方式、计数上限等） */
+  runConfig: WorkflowRunConfig
 }
 
 export class WorkflowActor extends ActorBase {
@@ -30,6 +33,13 @@ export class WorkflowActor extends ActorBase {
   private deviceReady = false
   private sessionVars: Record<string, unknown> = {}
   private executionCount = 0
+
+  /** flow 执行状态机 */
+  private flowState: FlowState = 'idle'
+  /** 累计成功次数（仅 endSuccess 节点触发） */
+  private successCount = 0
+  /** 累计失败次数（仅 endFail 节点触发） */
+  private failCount = 0
 
   /** 截图事件监听器（用于清理） */
   private screenshotHandler: ((event: ScreenshotEvent) => void) | null = null
@@ -79,12 +89,29 @@ export class WorkflowActor extends ActorBase {
       busy: this.busy,
       state: this.getState(),
       executionCount: this.executionCount,
+      flowState: this.flowState,
+      successCount: this.successCount,
+      failCount: this.failCount,
     }
+  }
+
+  /**
+   * 定时模式专用：由 CronManager 回调调用
+   * 仅当 flowState === 'idle' 时标记为 'pending'
+   */
+  markPending(): void {
+    if (this.flowState !== 'idle') {
+      this.sendLog('debug', `markPending ignored: flowState=${this.flowState}`)
+      return
+    }
+    this.flowState = 'pending'
+    this.sendLog('info', `定时信号到达，等待下次截图执行`)
+    this.emitFlowState()
   }
 
   // ── 私有方法 ─────────────────────────────────
 
-  /** 收到截图 → 执行工作流 */
+  /** 收到截图 → 根据触发模式决定是否执行工作流 */
   private async onScreenshot(event: ScreenshotEvent): Promise<void> {
     if (!this.isRunning()) return
     if (this.busy) {
@@ -92,11 +119,20 @@ export class WorkflowActor extends ActorBase {
       return
     }
 
+    // 触发模式判断
+    const { triggerMode } = this.config.runConfig
+    if (triggerMode === 'scheduled') {
+      // 定时模式：仅 pending 状态才执行
+      if (this.flowState !== 'pending') return
+    }
+    // 立即模式：每次都执行（fall through）
+
     // ★ busy 锁必须在 ensureReady 之前设置！
-    // 否则多个截图事件会在 await 期间全部通过 busy 检查，导致排队执行
     this.busy = true
     this.executionCount++
     const runNum = this.executionCount
+    this.flowState = 'processing'
+    this.emitFlowState()
 
     try {
       // 等待设备就绪（仅首次有效，幂等）
@@ -107,7 +143,8 @@ export class WorkflowActor extends ActorBase {
         } catch (err) {
           this.sendLog('error', `设备就绪检测失败: ${err instanceof Error ? err.message : String(err)}，本次任务已停止`)
           this.cancelled = true
-          this.emitStatus('error')
+          this.flowState = 'fail'
+          this.emitFlowState()
           return
         }
       }
@@ -140,10 +177,13 @@ export class WorkflowActor extends ActorBase {
       // 保存 session 变量
       this.sessionVars = this.extractSessionVars(result.variables)
 
-      if (result.success) {
-        this.sendLog('info', `#${runNum} completed (${result.stepsExecuted} steps)`)
+      // 日志
+      if (result.success === true) {
+        this.sendLog('info', `#${runNum} 成功 (${result.stepsExecuted} steps)`)
+      } else if (result.success === false) {
+        this.sendLog('error', `#${runNum} 失败: ${result.error}`)
       } else {
-        this.sendLog('error', `#${runNum} failed: ${result.error}`)
+        this.sendLog('info', `#${runNum} 完成 (${result.stepsExecuted} steps)`)
       }
 
       // 广播可视化结果（有注解时才发）
@@ -151,14 +191,70 @@ export class WorkflowActor extends ActorBase {
         this.emitVisual(event, ctx.annotations, runNum)
       }
 
-      // 广播状态变更
-      this.emitStatus(result.success ? 'idle' : 'error')
+      // 计数 + 检查上限
+      this.processResult(result)
     } catch (err) {
       this.sendLog('error', `#${runNum} crashed: ${String(err)}`)
-      this.emitStatus('error')
+      this.flowState = 'fail'
+      this.failCount++
+      this.emitFlowState()
     } finally {
       this.busy = false
+      // 定时模式：执行完毕后自动 pending，确保下次截图能继续跑
+      this.autoPending()
     }
+  }
+
+  /** 处理执行结果：计数 + 检查上限 + 状态流转 */
+  private processResult(result: ExecutionResult): void {
+    // 计数：仅 endSuccess (true) 和 endFail (false) 参与
+    if (result.success === true) {
+      this.successCount++
+      this.flowState = 'success'
+    } else if (result.success === false) {
+      this.failCount++
+      this.flowState = 'fail'
+    } else {
+      // undefined = 中性结束，不计入
+      this.flowState = 'idle'
+    }
+    this.emitFlowState()
+
+    // 检查成功上限
+    const { maxSuccessCount, maxFailCount } = this.config.runConfig
+    if (maxSuccessCount > 0 && this.successCount >= maxSuccessCount) {
+      this.sendLog('info', `✓ 成功 ${this.successCount} 次，达到上限 ${maxSuccessCount}，自动停止`)
+      this.flowState = 'completed'
+      this.cancelled = true
+      this.emitFlowState()
+      return
+    }
+
+    // 检查失败上限
+    if (maxFailCount > 0 && this.failCount >= maxFailCount) {
+      this.sendLog('error', `✗ 失败 ${this.failCount} 次，达到上限 ${maxFailCount}，自动停止`)
+      this.flowState = 'completed'
+      this.cancelled = true
+      this.emitFlowState()
+      return
+    }
+
+    // 未达到上限，回到 idle
+    if (this.flowState !== 'idle') {
+      // success/fail 瞬态后回到 idle
+      this.flowState = 'idle'
+      this.emitFlowState()
+    }
+  }
+
+  /** 定时模式下，执行完毕后自动进入 pending 等待下次截图 */
+  private autoPending(): void {
+    if (this.cancelled) return
+    if (this.config.runConfig.triggerMode !== 'scheduled') return
+    if (this.flowState === 'completed') return
+    this.flowState = 'pending'
+    this.sendLog('info', `等待下次截图继续执行`)
+    this.emitFlowState()
   }
 
   /** 初始化变量：local 重置，session 保留 */
@@ -201,7 +297,7 @@ export class WorkflowActor extends ActorBase {
     return session
   }
 
-  /** 广播工作流状态 */
+  /** 广播工作流状态（兼容旧接口） */
   private emitStatus(state: string): void {
     eventBus.emit(EventBusEvent.WORKFLOW_STATE, {
       runId: this.config.runId,
@@ -209,6 +305,25 @@ export class WorkflowActor extends ActorBase {
       deviceId: this.config.deviceId,
       state,
       executionCount: this.executionCount,
+      flowState: this.flowState,
+      successCount: this.successCount,
+      failCount: this.failCount,
+    })
+  }
+
+  /** 广播 flow 执行状态变更 */
+  private emitFlowState(): void {
+    const state = this.flowState === 'completed' ? 'stopped'
+      : (this.flowState === 'fail' ? 'error' : 'running')
+    eventBus.emit(EventBusEvent.WORKFLOW_STATE, {
+      runId: this.config.runId,
+      workflowId: this.config.workflow.id,
+      deviceId: this.config.deviceId,
+      state,
+      executionCount: this.executionCount,
+      flowState: this.flowState,
+      successCount: this.successCount,
+      failCount: this.failCount,
     })
   }
 

@@ -58,3 +58,21 @@ export const deviceWorkflowChecks = sqliteTable(
 
 export type DeviceWorkflowCheckRow = typeof deviceWorkflowChecks.$inferSelect
 export type NewDeviceWorkflowCheckRow = typeof deviceWorkflowChecks.$inferInsert
+
+// ── workflow_run_configs 表（工作流运行配置，per-device 维度）─────
+export const workflowRunConfigs = sqliteTable(
+  'workflow_run_configs',
+  {
+    id: text('id').primaryKey(),
+    deviceId: text('device_id').notNull(),
+    workflowId: text('workflow_id').notNull(),
+    configJson: text('config_json').notNull().default('{}'),
+    updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('run_config_device_wf_unique').on(table.deviceId, table.workflowId),
+  ],
+)
+
+export type WorkflowRunConfigRow = typeof workflowRunConfigs.$inferSelect
+export type NewWorkflowRunConfigRow = typeof workflowRunConfigs.$inferInsert

@@ -3,13 +3,14 @@
 // 职责：管理工作流启动/停止/状态查询，通过 DeviceSession 管理设备级会话
 // ─────────────────────────────────────────────
 
-import type { Workflow, WorkflowRunInfo, BatchRunWorkflowResponse, BatchRunItem, DeviceRunStatusInfo } from '@automan/shared/types.js'
+import type { Workflow, WorkflowRunInfo, BatchRunWorkflowResponse, BatchRunItem, DeviceRunStatusInfo, WorkflowRunConfig } from '@automan/shared/types.js'
 import { WorkflowRunState, DeviceRunStatus } from '@automan/shared/types.js'
 import { WorkflowActor, type WorkflowActorConfig } from './workflow.actor.js'
 import { ScreenshotDispatcher, type DeviceScreenshotInfo } from './screenshot.dispatcher.js'
 import { DeviceSession } from './device.session.js'
-import { db, workflows, devices } from '../../db/index.js'
-import { eq } from 'drizzle-orm'
+import { CronManager } from './cron.manager.js'
+import { db, workflows, devices, workflowRunConfigs } from '../../db/index.js'
+import { eq, and } from 'drizzle-orm'
 import { logger } from '../../core/logger.js'
 import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 
@@ -18,6 +19,52 @@ export class WorkflowService {
   private dispatcher = new ScreenshotDispatcher()
   /** 设备级会话缓存：每个设备一个 DeviceSession，多工作流共享 */
   private deviceSessions = new Map<string, DeviceSession>()
+  /** 动态 cron 任务管理器 */
+  private cronManager = new CronManager()
+
+  constructor() {
+    // 监听 WORKFLOW_STATE 事件，检测 completed 自动清理
+    eventBus.on(EventBusEvent.WORKFLOW_STATE, (payload: any) => {
+      if (payload?.flowState === 'completed') {
+        this.handleAutoCompleted(payload.runId, payload.workflowId, payload.deviceId)
+      }
+    })
+  }
+
+  /** 处理自动停止（completed）的工作流 */
+  private async handleAutoCompleted(runId: string, workflowId: string, deviceId: string): Promise<void> {
+    logger.info('WorkflowService', `auto-completed: runId=${runId}, workflow=${workflowId}`)
+    // 注销 cron
+    this.cronManager.unregister(deviceId, workflowId)
+    // 停止 actor（走正常停止流程）
+    try {
+      await this.stopWorkflow(runId)
+    } catch {
+      // ignore
+    }
+  }
+
+  /** 从 DB 加载运行配置，不存在则返回默认配置 */
+  private loadRunConfig(deviceId: string, workflowId: string): WorkflowRunConfig {
+    const row = db.select().from(workflowRunConfigs)
+      .where(and(eq(workflowRunConfigs.deviceId, deviceId), eq(workflowRunConfigs.workflowId, workflowId)))
+      .get()
+    if (row) {
+      try {
+        return JSON.parse(row.configJson) as WorkflowRunConfig
+      } catch {
+        // JSON 解析失败，用默认
+      }
+    }
+    return {
+      workflowId,
+      deviceId,
+      triggerMode: 'immediate',
+      scheduleTimes: [],
+      maxSuccessCount: 0,
+      maxFailCount: 0,
+    }
+  }
 
   /**
    * 启动工作流
@@ -62,6 +109,9 @@ export class WorkflowService {
     // 但立即触发检测流程（幂等），让它在后台开始执行
     session.ensureReady().catch(() => { /* actor 侧会处理错误 */ })
 
+    // 加载运行配置
+    const runConfig = this.loadRunConfig(deviceId, workflowId)
+
     // 创建 Actor
     const runId = crypto.randomUUID()
     const actorConfig: WorkflowActorConfig = {
@@ -71,11 +121,17 @@ export class WorkflowService {
       ldconsolePath: devRow.ldconsolePath,
       instanceIndex: devRow.instanceIndex,
       session,
+      runConfig,
     }
 
     const actor = new WorkflowActor(actorConfig)
     await actor.start()
     this.actors.set(runId, actor)
+
+    // 定时模式：注册 cron
+    if (runConfig.triggerMode === 'scheduled' && runConfig.scheduleTimes.length > 0) {
+      this.cronManager.register(deviceId, workflowId, runConfig.scheduleTimes, () => actor.markPending())
+    }
 
     // 启动截图调度器（每设备共享）
     const deviceInfo: DeviceScreenshotInfo = {
@@ -169,6 +225,7 @@ export class WorkflowService {
         }
 
         const runId = crypto.randomUUID()
+        const runConfig = this.loadRunConfig(deviceId, workflowId)
         const actorConfig: WorkflowActorConfig = {
           runId,
           workflow,
@@ -176,11 +233,17 @@ export class WorkflowService {
           ldconsolePath: devRow.ldconsolePath,
           instanceIndex: devRow.instanceIndex,
           session,
+          runConfig,
         }
 
         const actor = new WorkflowActor(actorConfig)
         await actor.start()
         this.actors.set(runId, actor)
+
+        // 定时模式：注册 cron
+        if (runConfig.triggerMode === 'scheduled' && runConfig.scheduleTimes.length > 0) {
+          this.cronManager.register(deviceId, workflowId, runConfig.scheduleTimes, () => actor.markPending())
+        }
 
         logger.info('WorkflowService', `started: ${workflow.name} on device ${devRow.name} (runId: ${runId})`)
         items.push({ workflowId, workflowName: workflow.name, runId, success: true })
@@ -226,6 +289,10 @@ export class WorkflowService {
     }
 
     const info = actor.getInfo()
+
+    // 注销 cron
+    this.cronManager.unregister(info.deviceId, info.workflowId)
+
     await actor.stop()
     this.actors.delete(runId)
 
@@ -304,6 +371,8 @@ export class WorkflowService {
       }
     }
     this.dispatcher.stopAll()
+    // 注销所有 cron
+    this.cronManager.unregisterAll()
     // 销毁所有设备会话
     for (const session of this.deviceSessions.values()) {
       session.destroy()

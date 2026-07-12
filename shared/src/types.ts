@@ -475,6 +475,39 @@ export interface SaveWorkflowRequest {
 // 工作流运行
 // ─────────────────────────────────────────
 
+/** 工作流触发方式 */
+export type WorkflowTriggerMode = 'immediate' | 'scheduled'
+
+/** 定时触发时间点 */
+export interface ScheduleTime {
+  hour: number   // 0-23
+  minute: number // 0-59
+}
+
+/** 工作流运行配置（per-device 维度） */
+export interface WorkflowRunConfig {
+  workflowId: string
+  deviceId: string
+  /** 触发方式，默认 immediate */
+  triggerMode: WorkflowTriggerMode
+  /** 定时时间点列表（triggerMode='scheduled' 时有效） */
+  scheduleTimes: ScheduleTime[]
+  /** 成功次数上限，0=不限制 */
+  maxSuccessCount: number
+  /** 失败次数上限，0=不限制 */
+  maxFailCount: number
+}
+
+/** 保存运行配置请求 */
+export interface SaveRunConfigRequest {
+  workflowId: string
+  deviceId: string
+  triggerMode?: WorkflowTriggerMode
+  scheduleTimes?: ScheduleTime[]
+  maxSuccessCount?: number
+  maxFailCount?: number
+}
+
 /** 工作流执行状态 */
 export enum WorkflowRunState {
   IDLE = 'idle',
@@ -482,6 +515,9 @@ export enum WorkflowRunState {
   ERROR = 'error',
   STOPPED = 'stopped',
 }
+
+/** 工作流 flow 执行状态（Actor 内部状态机） */
+export type FlowState = 'idle' | 'pending' | 'processing' | 'success' | 'fail' | 'completed'
 
 /** 启动工作流请求 */
 export interface RunWorkflowRequest {
@@ -518,6 +554,12 @@ export interface WorkflowStatusPayload {
   executionCount: number
   /** 当前执行的节点类型（可选） */
   currentNodeType?: string
+  /** flow 执行状态（Actor 内部状态机） */
+  flowState?: FlowState
+  /** 累计成功次数 */
+  successCount?: number
+  /** 累计失败次数 */
+  failCount?: number
 }
 
 // ─────────────────────────────────────────
