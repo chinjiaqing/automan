@@ -38,6 +38,9 @@ export type {
 export { adbClick, adbAreaClick } from './adb-click.js'
 export type { AdbClickResult } from './adb-click.js'
 
+// ── ADB 应用控制 API ───────────────────────────
+export { adbLaunchApp, adbKillApp, adbIsAppRunning } from './adb-app.js'
+
 // ── Python 工具（供其他业务扩展使用） ─────────
 export { runPythonScript, getPythonPath, getScriptPath, PythonWorker } from './python-helper.js'
 export type { PyOutput } from './python-helper.js'

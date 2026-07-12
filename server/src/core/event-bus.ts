@@ -28,6 +28,10 @@ export enum EventBusEvent {
   WORKFLOW_STATE = 'workflow:state',
   /** 工作流可视化结果 */
   WORKFLOW_VISUAL = 'workflow:visual',
+  /** 设备级日志（模拟器启动、分辨率校准等） */
+  DEVICE_LOG = 'device:log',
+  /** 设备运行状态变更 */
+  DEVICE_RUN_STATUS = 'device:run-status',
 }
 
 /** Actor 日志事件数据结构 */
@@ -45,6 +49,23 @@ export interface ActorStateEvent {
   from: string
   to: string
   timestamp: number
+}
+
+/** 设备级日志事件数据结构 */
+export interface DeviceLogEvent {
+  deviceId: string
+  level: 'info' | 'warn' | 'error'
+  message: string
+  timestamp: number
+}
+
+/** 设备运行状态变更事件数据结构 */
+export interface DeviceRunStatusEvent {
+  deviceId: string
+  status: string
+  activeWorkflowCount: number
+  runIds: string[]
+  updatedAt: number
 }
 
 /**

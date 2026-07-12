@@ -164,6 +164,10 @@ const nodeTypes: Record<string, any> = {
   areaClick: markRaw(ActionNode),
   delay: markRaw(ActionNode),
   variable: markRaw(DataNode),
+  launchApp: markRaw(ActionNode),
+  killApp: markRaw(ActionNode),
+  restartApp: markRaw(ActionNode),
+  appRunning: markRaw(ConditionNode),
 }
 
 const defaultEdgeOpts = {

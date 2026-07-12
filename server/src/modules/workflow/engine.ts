@@ -10,6 +10,7 @@ import { findPicPro } from '../../libs/find-pic-pro.js'
 import { getWords } from '../../libs/ocr.js'
 import { findStr } from '../../libs/ocr.js'
 import { adbClick, adbAreaClick } from '../../libs/adb-click.js'
+import { adbLaunchApp, adbKillApp, adbIsAppRunning } from '../../libs/adb-app.js'
 
 /** 从 data URL (base64 PNG) 解析图片尺寸 */
 function parsePngSizeFromDataUrl(dataUrl: string): { width: number; height: number } {
@@ -46,6 +47,8 @@ export interface EngineContext {
   /** 原始设备分辨率（用于 ADB 操作坐标转换） */
   originalWidth: number
   originalHeight: number
+  /** 取消检查回调，返回 true 表示应中止执行 */
+  shouldCancel?: () => boolean
 }
 
 /** 单次执行结果 */
@@ -62,6 +65,11 @@ export type LogFn = (level: string, message: string) => void
 
 /** 全局执行步数上限（防死循环） */
 const MAX_GLOBAL_STEPS = 5000
+
+/** 清理包名：去除首尾空白和多余冒号前缀 */
+function cleanPkgName(raw: unknown): string {
+  return String(raw ?? '').replace(/^[\s:]+/, '').trim()
+}
 
 export class WorkflowEngine {
   /**
@@ -93,6 +101,12 @@ export class WorkflowEngine {
     let steps = 0
 
     while (currentNodeId && steps < MAX_GLOBAL_STEPS) {
+      // 每个节点执行前检查取消标记
+      if (ctx.shouldCancel?.()) {
+        emit('info', `工作流已取消，停止执行`)
+        return { success: false, variables: ctx.variables, outputSummary: ctx.outputs, error: '用户手动停止', stepsExecuted: steps }
+      }
+
       const node = nodeMap.get(currentNodeId)
       if (!node) break
 
@@ -157,6 +171,57 @@ export class WorkflowEngine {
             emit('debug', `等待 ${ms}ms`)
             await new Promise<void>((r) => setTimeout(r, ms))
             currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'launchApp': {
+            const pkg = cleanPkgName(node.config.packageName)
+            if (!pkg) throw new Error('启动应用节点缺少包名')
+            emit('info', `启动应用: ${pkg}`)
+            try {
+              await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
+            } catch (e) {
+              emit('warn', `启动应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+            }
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'killApp': {
+            const pkg = cleanPkgName(node.config.packageName)
+            if (!pkg) throw new Error('关闭应用节点缺少包名')
+            emit('info', `关闭应用: ${pkg}`)
+            try {
+              await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
+            } catch (e) {
+              emit('warn', `关闭应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+            }
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'restartApp': {
+            const pkg = cleanPkgName(node.config.packageName)
+            if (!pkg) throw new Error('重启应用节点缺少包名')
+            emit('info', `重启应用: ${pkg}`)
+            try {
+              await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
+              await new Promise<void>((r) => setTimeout(r, 1000))
+              await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
+            } catch (e) {
+              emit('warn', `重启应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+            }
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'appRunning': {
+            const pkg = cleanPkgName(node.config.packageName)
+            if (!pkg) throw new Error('应用状态节点缺少包名')
+            const running = await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg)
+            emit('info', `${pkg} 运行中: ${running}`)
+            ctx.outputs[node.id] = { running }
+            currentNodeId = this.followEdge(node.id, running ? 'true' : 'false', adj)
             break
           }
 
@@ -269,6 +334,11 @@ export class WorkflowEngine {
       // 执行 body 链
       let nodeId = this.followEdge(loopNode.id, 'body', adj)
       while (nodeId && nodeId !== loopNode.id && steps < MAX_GLOBAL_STEPS) {
+        // 内层节点执行前检查取消标记
+        if (ctx.shouldCancel?.()) {
+          return { nextNodeId: undefined, steps }
+        }
+
         const innerNode = nodeMap.get(nodeId)
         if (!innerNode) break
 
@@ -309,6 +379,46 @@ export class WorkflowEngine {
             const ms = Number(innerNode.config.ms ?? 1000)
             await new Promise<void>((r) => setTimeout(r, ms))
             nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'launchApp': {
+            const pkg = cleanPkgName(innerNode.config.packageName)
+            if (pkg) {
+              emit('info', `loop 内启动应用: ${pkg}`)
+              try { await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg) }
+              catch (e) { emit('warn', `loop 内启动应用失败: ${e instanceof Error ? e.message : String(e)}`) }
+            }
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'killApp': {
+            const pkg = cleanPkgName(innerNode.config.packageName)
+            if (pkg) {
+              try { await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg) }
+              catch (e) { emit('warn', `loop 内关闭应用失败: ${e instanceof Error ? e.message : String(e)}`) }
+            }
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'restartApp': {
+            const pkg = cleanPkgName(innerNode.config.packageName)
+            if (pkg) {
+              try {
+                await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
+                await new Promise<void>((r) => setTimeout(r, 1000))
+                await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
+              } catch (e) {
+                emit('warn', `loop 内重启应用失败: ${e instanceof Error ? e.message : String(e)}`)
+              }
+            }
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'appRunning': {
+            const pkg = cleanPkgName(innerNode.config.packageName)
+            const running = pkg ? await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg) : false
+            ctx.outputs[innerNode.id] = { running }
+            nodeId = this.followEdge(innerNode.id, running ? 'true' : 'false', adj)
             break
           }
           case 'end':

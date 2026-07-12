@@ -29,6 +29,9 @@ export enum WsMessageType {
   WORKFLOW_STATUS = 'workflow:status',
   WORKFLOW_VISUAL = 'workflow:visual',
   DEVICE_SCREENSHOT = 'device:screenshot',
+  DEVICE_LOG = 'device:log',
+  /** 设备运行状态变更 */
+  DEVICE_RUN_STATUS = 'device:run-status',
 }
 
 /** WS 消息基础结构 */
@@ -417,7 +420,7 @@ export interface InputPort {
 /** 节点类型定义 */
 export interface NodeTypeDefinition {
   type: string
-  category: 'flow' | 'action' | 'data'
+  category: 'flow' | 'action' | 'data' | 'app'
   label: string
   icon: string
   configSchema: FieldSchema[]
@@ -547,6 +550,14 @@ export interface DeviceScreenshotPayload {
   timestamp: number
 }
 
+/** 设备级日志推送负载 */
+export interface DeviceLogPayload {
+  deviceId: string
+  level: 'info' | 'warn' | 'error'
+  message: string
+  timestamp: number
+}
+
 /** 工作流可视化推送负载 */
 export interface WorkflowVisualPayload {
   deviceId: string
@@ -558,4 +569,82 @@ export interface WorkflowVisualPayload {
   annotations: VisualAnnotation[]
   executionCount: number
   timestamp: number
+}
+
+// ─────────────────────────────────────────
+// 批量启动工作流
+// ─────────────────────────────────────────
+
+/** 批量启动工作流请求（单次 HTTP，设备级 ensureReady 一次） */
+export interface BatchRunWorkflowRequest {
+  deviceId: string
+  workflowIds: string[]
+  /** 截图间隔毫秒，默认 2000 */
+  screenshotInterval?: number
+}
+
+/** 批量启动中单个结果 */
+export interface BatchRunItem {
+  workflowId: string
+  workflowName?: string
+  /** 成功时为 runId，失败时为 null */
+  runId: string | null
+  success: boolean
+  /** 失败时的错误信息 */
+  error?: string
+}
+
+/** 批量启动响应 */
+export interface BatchRunWorkflowResponse {
+  deviceId: string
+  items: BatchRunItem[]
+}
+
+// ─────────────────────────────────────────
+// 设备工作流勾选快照
+// ─────────────────────────────────────────
+
+/** 保存勾选快照请求 */
+export interface SaveCheckedWorkflowsRequest {
+  deviceId: string
+  workflowIds: string[]
+}
+
+/** 查询勾选快照响应 */
+export interface CheckedWorkflowsSnapshot {
+  deviceId: string
+  workflowIds: string[]
+  updatedAt: number
+}
+
+// ─────────────────────────────────────────
+// 设备运行状态（区别于 DeviceStatus 的模拟器进程状态）
+// ─────────────────────────────────────────
+
+/** 设备运行状态枚举 */
+export enum DeviceRunStatus {
+  IDLE = 'idle',
+  RUNNING = 'running',
+  ERROR = 'error',
+}
+
+/** 单个设备的运行状态信息 */
+export interface DeviceRunStatusInfo {
+  deviceId: string
+  status: DeviceRunStatus
+  /** 当前运行的工作流数量 */
+  activeWorkflowCount: number
+  /** 运行中的 runId 列表 */
+  runIds: string[]
+  /** 最近一次状态变更时间 */
+  updatedAt: number
+}
+
+/** 设备运行状态变更 WS 推送 payload */
+export interface DeviceRunStatusPayload {
+  deviceId: string
+  status: DeviceRunStatus
+  activeWorkflowCount: number
+  runIds: string[]
+  updatedAt: number
 }

@@ -5,7 +5,7 @@
       <div class="text-center mb-8">
         <img src="/logo.png" alt="logo" class="w-16 h-16 mx-auto mb-3" />
         <h1 class="text-2xl font-bold text-gray-800">凹凸曼</h1>
-        <p class="text-sm text-gray-400 mt-1">一个面向自动化的脚本编排引擎</p>
+        <p class="text-sm text-gray-400 mt-1">一个面向自动化的游戏脚本编排引擎</p>
       </div>
 
       <!-- 表单 -->

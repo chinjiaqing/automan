@@ -26,10 +26,10 @@
           <!-- Switch 开关 -->
           <button
             class="wf-switch"
-            :class="{ 'is-on': isChecked(wf.id) }"
-            @click.stop="toggleCheck(wf.id)"
+            :class="{ 'is-on': isChecked(wf.id, props.deviceId) }"
+            @click.stop="toggleCheck(wf.id, props.deviceId)"
             :disabled="isRunning"
-            :title="isChecked(wf.id) ? '已启用' : '未启用'"
+            :title="isChecked(wf.id, props.deviceId) ? '已启用' : '未启用'"
           >
             <span class="wf-switch__dot" />
           </button>

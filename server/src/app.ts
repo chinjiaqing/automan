@@ -110,6 +110,22 @@ export async function createApp(): Promise<FastifyInstance> {
     })
   })
 
+  eventBus.on(EventBusEvent.DEVICE_LOG, (data) => {
+    app.wsGateway.broadcast({
+      type: WsMessageType.DEVICE_LOG,
+      payload: data,
+      timestamp: Date.now(),
+    })
+  })
+
+  eventBus.on(EventBusEvent.DEVICE_RUN_STATUS, (data) => {
+    app.wsGateway.broadcast({
+      type: WsMessageType.DEVICE_RUN_STATUS,
+      payload: data,
+      timestamp: Date.now(),
+    })
+  })
+
   // ── 5. 基础路由 ────────────────────────────
   app.get('/', async () => {
     return { message: 'Hello World — Automan Server is running 🚀' }

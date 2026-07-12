@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
-import { db, workflows } from '../db/index.js'
+import { db, workflows, deviceWorkflowChecks } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import type {
   CreateWorkflowRequest,
@@ -14,6 +14,9 @@ import type {
   WorkflowEdge,
   RunWorkflowRequest,
   StopWorkflowRequest,
+  BatchRunWorkflowRequest,
+  SaveCheckedWorkflowsRequest,
+  CheckedWorkflowsSnapshot,
 } from '@automan/shared/types.js'
 import type { WorkflowService } from '../modules/workflow/service.js'
 
@@ -196,5 +199,98 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
       return { success: true as const, data: [] }
     }
     return { success: true as const, data: workflowService.listRuns() }
+  })
+
+  // ── 批量启动工作流（设备级） ─────────────────────
+  app.post<{ Body: BatchRunWorkflowRequest }>(
+    '/api/workflows/run-batch',
+    async (request, reply) => {
+      if (!workflowService) {
+        return reply.status(503).send({ success: false, code: 'NOT_READY', message: 'WorkflowService 未初始化' })
+      }
+      const { deviceId, workflowIds, screenshotInterval } = request.body
+      if (!deviceId || !workflowIds || !Array.isArray(workflowIds) || workflowIds.length === 0) {
+        return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 和 workflowIds 为必填' })
+      }
+      try {
+        const result = await workflowService.batchStartWorkflows(deviceId, workflowIds, screenshotInterval)
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(400).send({ success: false, code: 'RUN_ERROR', message: err instanceof Error ? err.message : String(err) })
+      }
+    },
+  )
+
+  // ── 查询所有设备勾选快照 ─────────────────────
+  app.get('/api/workflows/checked', async () => {
+    const rows = db.select().from(deviceWorkflowChecks).all()
+    const data: CheckedWorkflowsSnapshot[] = rows.map((row) => ({
+      deviceId: row.deviceId,
+      workflowIds: JSON.parse(row.workflowIds) as string[],
+      updatedAt: row.updatedAt,
+    }))
+    return { success: true as const, data }
+  })
+
+  // ── 查询单设备勾选快照 ─────────────────────
+  app.get<{ Params: { deviceId: string } }>('/api/workflows/checked/:deviceId', async (request) => {
+    const { deviceId } = request.params
+    const row = db.select().from(deviceWorkflowChecks).where(eq(deviceWorkflowChecks.deviceId, deviceId)).get()
+    if (!row) {
+      return { success: true as const, data: { deviceId, workflowIds: [], updatedAt: 0 } as CheckedWorkflowsSnapshot }
+    }
+    return {
+      success: true as const,
+      data: {
+        deviceId: row.deviceId,
+        workflowIds: JSON.parse(row.workflowIds) as string[],
+        updatedAt: row.updatedAt,
+      } as CheckedWorkflowsSnapshot,
+    }
+  })
+
+  // ── 保存勾选快照 ─────────────────────
+  app.post<{ Body: SaveCheckedWorkflowsRequest }>(
+    '/api/workflows/checked-save',
+    async (request, reply) => {
+      const { deviceId, workflowIds } = request.body
+      if (!deviceId) {
+        return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 为必填' })
+      }
+      const now = Date.now()
+      // upsert: 如果已存在则替换
+      const existing = db.select().from(deviceWorkflowChecks).where(eq(deviceWorkflowChecks.deviceId, deviceId)).get()
+      if (existing) {
+        db.update(deviceWorkflowChecks)
+          .set({ workflowIds: JSON.stringify(workflowIds ?? []), updatedAt: now })
+          .where(eq(deviceWorkflowChecks.deviceId, deviceId))
+          .run()
+      } else {
+        db.insert(deviceWorkflowChecks)
+          .values({ id: crypto.randomUUID(), deviceId, workflowIds: JSON.stringify(workflowIds ?? []), updatedAt: now })
+          .run()
+      }
+      return {
+        success: true as const,
+        data: { deviceId, workflowIds: workflowIds ?? [], updatedAt: now } as CheckedWorkflowsSnapshot,
+      }
+    },
+  )
+
+  // ── 查询所有设备运行状态 ─────────────────────
+  app.get('/api/workflows/device-status', async () => {
+    if (!workflowService) {
+      return { success: true as const, data: [] }
+    }
+    return { success: true as const, data: workflowService.getDeviceRunStatuses() }
+  })
+
+  // ── 查询单设备运行状态 ─────────────────────
+  app.get<{ Params: { deviceId: string } }>('/api/workflows/device-status/:deviceId', async (request) => {
+    if (!workflowService) {
+      return { success: true as const, data: null }
+    }
+    const { deviceId } = request.params
+    return { success: true as const, data: workflowService.getDeviceRunStatus(deviceId) }
   })
 }

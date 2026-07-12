@@ -17,13 +17,13 @@
         <div
           v-for="device in devices"
           :key="device.id"
-          class="group flex items-center gap-2 px-3 py-2.5 rounded-md cursor-pointer transition-colors hover:bg-brand-50 mb-0.5"
+          class="group flex items-center gap-2 px-3 h-10 rounded-md cursor-pointer transition-colors hover:bg-brand-50 mb-0.5"
           :class="{ 'bg-brand-50 text-brand-700': selectedId === device.id }"
           @click="selectedId = device.id"
         >
           <i
             class="pi text-sm"
-            :class="device.status === 'running' ? 'pi-circle-fill text-green-500' : 'pi-circle text-gray-400'"
+            :class="getDeviceStatusIcon(device)"
           />
           <span class="flex-1 text-sm truncate">{{ device.name }}</span>
           <div class="hidden group-hover:flex items-center gap-0.5">
@@ -45,7 +45,7 @@
       <div class="flex-1 min-w-0">
         <LogPanel
           :logs="logs"
-          :checked-count="checkedCount"
+          :checked-count="getCheckedCount(selectedDevice?.id ?? '')"
           :is-running="isRunning"
           :elapsed="elapsed"
           @start="handleStart"
@@ -87,6 +87,7 @@ import { ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import type { DeviceInfo } from '@automan/shared/types.js'
+import { DeviceRunStatus } from '@automan/shared/types.js'
 import { useDevices } from '../composables/useDevices.js'
 import { useWorkflowRun } from '../composables/useWorkflowRun.js'
 import DeviceDialog from '../components/DeviceDialog.vue'
@@ -95,7 +96,7 @@ import LogPanel from '../components/LogPanel.vue'
 import ExecutionViewer from '../components/ExecutionViewer.vue'
 
 const { devices, loading, fetchDevices, deleteDevice } = useDevices()
-const { logs, checkedCount, isRunning, elapsed, screenshotMap, annotationMap, startAll, stopAll, clearLogs } = useWorkflowRun()
+const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, clearLogs } = useWorkflowRun()
 
 const selectedId = ref('')
 const selectedDevice = computed(() => devices.value.find((d) => d.id === selectedId.value))
@@ -123,6 +124,15 @@ onMounted(async () => {
 // ── 新增/编辑弹窗 ──
 const dialogVisible = ref(false)
 const editDevice = ref<DeviceInfo | null>(null)
+
+/** 设备状态图标：结合模拟器状态 + 工作流运行状态 */
+function getDeviceStatusIcon(device: DeviceInfo) {
+  const runStatus = deviceRunStatusMap.value.get(device.id)
+  if (runStatus?.status === DeviceRunStatus.RUNNING) return 'pi-circle-fill text-orange-500'
+  if (runStatus?.status === DeviceRunStatus.ERROR) return 'pi-circle-fill text-red-500'
+  if (device.status === 'running') return 'pi-circle-fill text-green-500'
+  return 'pi-circle text-gray-400'
+}
 
 function openCreate() {
   editDevice.value = null

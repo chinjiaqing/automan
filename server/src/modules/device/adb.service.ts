@@ -12,6 +12,7 @@ import { logger } from '../../core/logger.js'
 /** ADB 命令执行超时（毫秒） */
 const ADB_CONNECT_TIMEOUT = 5_000
 const ADB_SCREENCAP_TIMEOUT = 10_000
+const ADB_SHELL_TIMEOUT = 5_000
 
 export class AdbService {
   /**
@@ -64,6 +65,77 @@ export class AdbService {
         },
       )
     })
+  }
+
+  /**
+   * 执行 ADB shell 命令并返回输出
+   */
+  async shell(adbPath: string, target: string, ...cmd: string[]): Promise<string> {
+    const args = ['-s', target, 'shell', ...cmd]
+    return new Promise((resolveP, reject) => {
+      execFile(
+        adbPath,
+        args,
+        { timeout: ADB_SHELL_TIMEOUT, windowsHide: true, encoding: 'buffer' },
+        (err, stdoutBuf) => {
+          if (err) {
+            reject(new Error(`adb shell ${cmd.join(' ')} failed: ${err.message}`))
+            return
+          }
+          resolveP(iconv.decode(Buffer.from(stdoutBuf), 'utf-8').trim())
+        },
+      )
+    })
+  }
+
+  /**
+   * 获取设备当前分辨率
+   * 返回 { width, height } 或 null（无法获取时）
+   */
+  async getScreenSize(adbPath: string, target: string): Promise<{ width: number; height: number } | null> {
+    try {
+      const output = await this.shell(adbPath, target, 'wm', 'size')
+      // 输出示例: "Physical size: 1280x720"
+      const match = output.match(/(\d+)x(\d+)/)
+      if (!match) {
+        logger.warn('AdbService', `无法解析 wm size 输出: ${output}`)
+        return null
+      }
+      return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) }
+    } catch (err) {
+      logger.error('AdbService', `getScreenSize failed: ${String(err)}`)
+      return null
+    }
+  }
+
+  /**
+   * 设置设备分辨率
+   * 命令: adb shell wm size {width}x{height}
+   */
+  async setScreenSize(adbPath: string, target: string, width: number, height: number): Promise<boolean> {
+    try {
+      await this.shell(adbPath, target, 'wm', 'size', `${width}x${height}`)
+      logger.info('AdbService', `setScreenSize: ${width}x${height} on ${target}`)
+      return true
+    } catch (err) {
+      logger.error('AdbService', `setScreenSize failed: ${String(err)}`)
+      return false
+    }
+  }
+
+  /**
+   * 设置设备 DPI
+   * 命令: adb shell wm density {dpi}
+   */
+  async setDensity(adbPath: string, target: string, dpi: number): Promise<boolean> {
+    try {
+      await this.shell(adbPath, target, 'wm', 'density', String(dpi))
+      logger.info('AdbService', `setDensity: ${dpi} on ${target}`)
+      return true
+    } catch (err) {
+      logger.error('AdbService', `setDensity failed: ${String(err)}`)
+      return false
+    }
   }
 
   /**

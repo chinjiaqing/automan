@@ -9,6 +9,7 @@ import { WorkflowEngine, type EngineContext } from './engine.js'
 import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 import type { ScreenshotEvent } from './screenshot.dispatcher.js'
 import type { VisualAnnotation } from '@automan/shared/types.js'
+import type { DeviceSession } from './device.session.js'
 import { AdbService } from '../device/adb.service.js'
 
 /** WorkflowActor 配置 */
@@ -18,12 +19,15 @@ export interface WorkflowActorConfig {
   deviceId: string
   ldconsolePath: string
   instanceIndex: number
+  session: DeviceSession
 }
 
 export class WorkflowActor extends ActorBase {
   private readonly config: WorkflowActorConfig
   private readonly engine = new WorkflowEngine()
   private busy = false
+  private cancelled = false
+  private deviceReady = false
   private sessionVars: Record<string, unknown> = {}
   private executionCount = 0
 
@@ -50,6 +54,9 @@ export class WorkflowActor extends ActorBase {
   }
 
   override async stop(): Promise<void> {
+    // 先设置取消标记，让正在执行的引擎尽快退出
+    this.cancelled = true
+
     // 取消截图订阅
     if (this.screenshotHandler) {
       eventBus.off(EventBusEvent.SCREENSHOT_READY, this.screenshotHandler)
@@ -70,6 +77,7 @@ export class WorkflowActor extends ActorBase {
       workflowId: this.config.workflow.id,
       deviceId: this.config.deviceId,
       busy: this.busy,
+      state: this.getState(),
       executionCount: this.executionCount,
     }
   }
@@ -80,15 +88,30 @@ export class WorkflowActor extends ActorBase {
   private async onScreenshot(event: ScreenshotEvent): Promise<void> {
     if (!this.isRunning()) return
     if (this.busy) {
-      this.sendLog('debug', `busy, skip screenshot #${this.executionCount + 1}`)
+      this.sendLog('debug', `busy, skip screenshot handle #${this.executionCount + 1}`)
       return
     }
 
+    // ★ busy 锁必须在 ensureReady 之前设置！
+    // 否则多个截图事件会在 await 期间全部通过 busy 检查，导致排队执行
     this.busy = true
     this.executionCount++
     const runNum = this.executionCount
 
     try {
+      // 等待设备就绪（仅首次有效，幂等）
+      if (!this.deviceReady) {
+        try {
+          await this.config.session.ensureReady()
+          this.deviceReady = true
+        } catch (err) {
+          this.sendLog('error', `设备就绪检测失败: ${err instanceof Error ? err.message : String(err)}，本次任务已停止`)
+          this.cancelled = true
+          this.emitStatus('error')
+          return
+        }
+      }
+
       this.sendLog('info', `#${runNum} executing...`)
 
       // 初始化 local 变量（每次重置），session 变量保留
@@ -107,6 +130,7 @@ export class WorkflowActor extends ActorBase {
         screenshotHeight: event.height,
         originalWidth: event.originalWidth,
         originalHeight: event.originalHeight,
+        shouldCancel: () => this.cancelled,
       }
 
       const result = await this.engine.execute(this.config.workflow, ctx, (level, msg) => {

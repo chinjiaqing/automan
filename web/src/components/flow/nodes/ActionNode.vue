@@ -45,6 +45,9 @@ const iconBg = computed(() => {
     areaClick: 'bg-rose-500',
     delay: 'bg-gray-500',
     screenshot: 'bg-teal-500',
+    launchApp: 'bg-green-500',
+    killApp: 'bg-red-500',
+    restartApp: 'bg-orange-500',
   }
   return map[props.data.type] ?? 'bg-blue-500'
 })

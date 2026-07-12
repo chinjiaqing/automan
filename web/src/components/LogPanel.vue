@@ -29,7 +29,7 @@
         @click="$emit('stop')"
       />
 
-      <span class="text-xs text-gray-500 font-mono">
+      <span class="text-xs text-gray-500 font-mono flex items-center">
         <i class="pi pi-clock mr-1" />{{ formatElapsed(elapsed) }}
       </span>
 

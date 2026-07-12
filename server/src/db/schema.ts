@@ -41,3 +41,20 @@ export const workflows = sqliteTable(
 
 export type WorkflowRow = typeof workflows.$inferSelect
 export type NewWorkflowRow = typeof workflows.$inferInsert
+
+// ── device_workflow_checks 表（勾选快照持久化）─────
+export const deviceWorkflowChecks = sqliteTable(
+  'device_workflow_checks',
+  {
+    id: text('id').primaryKey(),
+    deviceId: text('device_id').notNull(),
+    workflowIds: text('workflow_ids').notNull().default('[]'),
+    updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('device_checks_unique').on(table.deviceId),
+  ],
+)
+
+export type DeviceWorkflowCheckRow = typeof deviceWorkflowChecks.$inferSelect
+export type NewDeviceWorkflowCheckRow = typeof deviceWorkflowChecks.$inferInsert

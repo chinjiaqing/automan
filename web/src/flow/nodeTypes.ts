@@ -210,11 +210,64 @@ export const dataNodeTypes: NodeTypeDefinition[] = [
   },
 ]
 
+// ── 应用节点 ────────────────────────────────────
+export const appNodeTypes: NodeTypeDefinition[] = [
+  {
+    type: 'launchApp',
+    category: 'app',
+    label: '启动应用',
+    icon: 'pi-play-circle',
+    configSchema: [
+      { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
+    ],
+    outputs: [],
+    inputs: [],
+    exitCount: 1,
+  },
+  {
+    type: 'killApp',
+    category: 'app',
+    label: '关闭应用',
+    icon: 'pi-times-circle',
+    configSchema: [
+      { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
+    ],
+    outputs: [],
+    inputs: [],
+    exitCount: 1,
+  },
+  {
+    type: 'restartApp',
+    category: 'app',
+    label: '重启应用',
+    icon: 'pi-refresh',
+    configSchema: [
+      { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
+    ],
+    outputs: [],
+    inputs: [],
+    exitCount: 1,
+  },
+  {
+    type: 'appRunning',
+    category: 'app',
+    label: '应用状态',
+    icon: 'pi-info-circle',
+    configSchema: [
+      { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
+    ],
+    outputs: [{ key: 'running', label: '是否运行中', dataType: 'boolean' }],
+    inputs: [],
+    exitCount: 2,
+  },
+]
+
 // ── 合并所有类型 ────────────────────────────────
 export const allNodeTypes: NodeTypeDefinition[] = [
   ...flowNodeTypes,
   ...actionNodeTypes,
   ...dataNodeTypes,
+  ...appNodeTypes,
 ]
 
 /** 按 type 查找节点定义 */
@@ -228,5 +281,6 @@ export function getNodeTypesByCategory(): Record<string, NodeTypeDefinition[]> {
     flow: flowNodeTypes,
     action: actionNodeTypes,
     data: dataNodeTypes,
+    app: appNodeTypes,
   }
 }
