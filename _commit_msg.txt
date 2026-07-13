@@ -1,3 +1,8 @@
+refactor: 迁移改为幂等 CREATE TABLE IF NOT EXISTS，移除文件迁移依赖
+
+- 替换 Drizzle migrate() 为 sqlite.exec(CREATE TABLE IF NOT EXISTS)
+- 解决 journal 状态不一致导致的启动报错
+- 新增表/列只需更新 schema.ts + migrate.ts，启动自动同步
 feat: 工作流运行配置体系 + 状态机 + UX 增强
 
 - 新增运行配置（触发方式/定时调度/停止条件）+ DB 表 + API CRUD
