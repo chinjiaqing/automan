@@ -10,7 +10,7 @@
 
 > ⚠️ **技术栈说明**：本项目主体基于 Node.js 运行，Node.js 并非高性能方案，如需极致性能请考虑其他技术选型。
 
-[GitHub](https://github.com/chinjiaqing/automan)
+[GitHub](https://github.com/chinjiaqing/automan) · [脚本仓库](https://github.com/chinjiaqing/automan-scripts)
 
 </div>
 
