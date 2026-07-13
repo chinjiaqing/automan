@@ -1,37 +1,19 @@
-refactor: 迁移改为幂等 CREATE TABLE IF NOT EXISTS，移除文件迁移依赖
+feat(swipe): 拟真滑动全链路实现 + 变量节点 init action
 
-- 替换 Drizzle migrate() 为 sqlite.exec(CREATE TABLE IF NOT EXISTS)
-- 解决 journal 状态不一致导致的启动报错
-- 新增表/列只需更新 schema.ts + migrate.ts，启动自动同步
-feat: 工作流运行配置体系 + 状态机 + UX 增强
+核心能力:
+- 新增 adbSwipe 两阶段架构：computeSwipeTrajectory 纯数学计算（Bezier + smoothstep 缓动 + 微抖动）+ 单次 ADB swipe 执行，避免分段短距被 Android 识别为 tap
+- 15% 概率连续回弹（从终点连续第二次 swipe，不间断）
 
-- 新增运行配置（触发方式/定时调度/停止条件）+ DB 表 + API CRUD
-- CronManager 动态定时调度（node-cron）
-- WorkflowActor 6 态状态机 + 成功/失败计数 + 自动停止
-- 三值成功语义：endSuccess(true) / endFail(false) / end(undefined)
-- autoPending 修复定时模式 neutral end 卡死问题
-- 新增 endSuccess/endFail 流程节点组件
-- WorkflowListPanel 配置表单 + Toast 保存反馈
-- ExecutionViewer 画布点击触发模拟器 ADB 点击（含坐标转换）
-- 全局 PrimeVue Toast 服务
-- 新建 flow 仅固定开始节点
-feat: 数据引用算术表达式 + 随机等待节点 + 导入导出复制 + UI 优化
+Server:
+- libs/adb-swipe.ts: 轨迹计算 + 单次 adb shell input swipe 执行
+- routes/device.routes.ts: POST /api/devices/swipe 接口
+- engine.ts: execSwipe 方法 + swipe annotation 注解 + init action（变量不存在时才初始化，用于 session 跨轮持久化）
 
-核心功能:
-- resolveValue 支持内嵌算术表达式 ({{ref}} + 100), 递归下降解析器支持 +-*/ 和括号
-- 新增 randomDelay 节点: left~right 范围随机延迟, 输出 actualMs
-- 新增 coord-ref 字段类型: region 参数支持 {{ref}} 引用 + 解析
-- 点击节点 x/y 改为 data-input 类型, 支持引用
-- 坐标安全钳制: clampRegion/clampPoint 自动限制到 [0, maxWidth/Height]
-- 条件节点输出存储: condition.result 可被下游引用
+Web:
+- flow/nodeTypes.ts: 新增 swipe 节点定义（startRegion/endRegion/padding）+ variable options 增加 init
+- views/CanvasView.vue: 拟真滑动调试区 + SVG 轨迹叠加 + 动画 CSS
+- components/ExecutionViewer.vue: swipe annotation SVG 路径渲染 + 起点/终点标记
+- api/device.ts: deviceApi.swipe() 方法
 
-Flow 编辑器:
-- 新增导入功能: 上传 JSON 文件创建并自动选中
-- 新增导出功能: 下载 {name, nodes, edges} 格式 JSON
-- 新增复制功能: 弹窗预填原名+随机后缀, 复制全部节点并选中
-- 左侧脚本列表加宽至 240px, 导入/新建按钮 primary 样式
-- 工具栏操作按钮 flex-shrink-0 防挤压, 移除 Flow ID 显示
-
-修复:
-- API 空 body 时不再发送 Content-Type: application/json (修复 delete 报错)
-- 识图模板图片移除按钮改为红色圆形, 上传按钮改为 outlined 样式
+Shared:
+- types.ts: SwipePoint / AdbSwipeRequest / AdbSwipeResponse + VisualAnnotationType 增加 'swipe'

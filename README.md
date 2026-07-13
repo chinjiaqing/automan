@@ -26,6 +26,16 @@
 
 ---
 
+## 演示视频
+
+<div align="center">
+
+<video src="screenshots/2026713214452rec.mp4" width="600" controls></video>
+
+</div>
+
+---
+
 ## 应用截图
 
 <div align="center">
