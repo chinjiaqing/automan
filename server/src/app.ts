@@ -6,6 +6,9 @@
 
 import Fastify from 'fastify'
 import type { FastifyInstance, FastifyError } from 'fastify'
+import fastifyStatic from '@fastify/static'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // 插件
 import cors from '@fastify/cors'
@@ -127,10 +130,6 @@ export async function createApp(): Promise<FastifyInstance> {
   })
 
   // ── 5. 基础路由 ────────────────────────────
-  app.get('/', async () => {
-    return { message: 'Hello World — Automan Server is running 🚀' }
-  })
-
   app.get('/health', async () => {
     return {
       status: 'ok',
@@ -141,11 +140,39 @@ export async function createApp(): Promise<FastifyInstance> {
     }
   })
 
+  // ── 静态文件路径 ────────────────────────────
+  const isProduction = process.env.NODE_ENV === 'production'
+  const webDist = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist')
+
+  // 非生产模式下提供根路由
+  if (!isProduction) {
+    app.get('/', async () => {
+      return { message: 'Hello World — Automan Server is running 🚀' }
+    })
+  }
+
   // ── 6. 业务路由模块 ────────────────────────
   await taskRoutes(app, taskService)
   await deviceRoutes(app)
   await filesystemRoutes(app)
   await workflowRoutes(app, workflowService)
+
+  // ── 7. 静态文件托管（生产模式）────────────
+  if (isProduction) {
+    await app.register(fastifyStatic, {
+      root: webDist,
+      prefix: '/',
+      wildcard: false,
+    })
+    // SPA 回退：未匹配的 GET 路由返回 index.html
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/ws')) {
+        return reply.sendFile('index.html')
+      }
+      reply.status(404).send({ statusCode: 404, code: 'NOT_FOUND', message: 'Not Found' })
+    })
+    app.log.info(`Serving static files from ${webDist}`)
+  }
 
   // ── 7. WebSocket 路由 ──────────────────────
   app.get('/ws', { websocket: true }, (socket, req) => {

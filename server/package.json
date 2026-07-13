@@ -1,6 +1,9 @@
 {
   "name": "@automan/server",
   "version": "0.1.0",
+  "description": "Automan 后端服务 — Fastify + 工作流引擎 + 设备控制",
+  "author": "chinjiaqing",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "scripts": {
@@ -15,6 +18,7 @@
   "dependencies": {
     "@automan/shared": "workspace:*",
     "@fastify/cors": "^11.0.0",
+    "@fastify/static": "^10.1.0",
     "@fastify/websocket": "^11.0.2",
     "better-sqlite3": "12.11.1",
     "drizzle-orm": "^0.45.2",

@@ -1,6 +1,9 @@
 {
   "name": "@automan/web",
   "version": "0.1.0",
+  "description": "Automan 前端应用 — Vue 3 + 可视化工作流编辑器",
+  "author": "chinjiaqing",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "scripts": {

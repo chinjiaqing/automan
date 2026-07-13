@@ -97,11 +97,11 @@
 
 ### 第一步：启动
 
-运行 `start.bat`，自动完成环境准备和服务启动。首次运行需下载 Node.js 和 Python，请耐心等待。
+运行 `start.bat`，自动完成环境准备、项目构建和服务启动。首次运行需下载 Node.js 和 Python，请耐心等待。
 
-### 第二步：登录
+### 第二步：访问
 
-浏览器打开 `http://localhost:5173`，输入服务器地址和端口（默认 `127.0.0.1` : `3000`），点击连接。
+浏览器打开 `http://localhost:3000`，即可进入系统。
 
 ### 第三步：添加设备
 
@@ -132,6 +132,18 @@ start.bat
 
 无需预装 Node.js 和 Python，`start.bat` 会自动处理。
 
+启动后访问 `http://localhost:3000` 即可使用。
+
+### 开发者模式
+
+开发者可使用 `start-dev.bat` 启动开发环境（热重载 + 独立前端服务）：
+
+```
+start-dev.bat
+```
+
+开发模式下前端地址为 `http://localhost:5173`。
+
 ---
 
 ## 文档
@@ -143,4 +155,4 @@ start.bat
 
 ## 许可证
 
-MIT
+[MIT](LICENSE) © [chinjiaqing](https://github.com/chinjiaqing)

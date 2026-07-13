@@ -1,5 +1,17 @@
 {
   "name": "automan",
+  "version": "0.1.0",
+  "description": "低代码自动化脚本编排引擎 — 可视化工作流编辑 + 截图驱动执行",
+  "author": "chinjiaqing",
+  "license": "MIT",
+  "homepage": "https://github.com/chinjiaqing/automan#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chinjiaqing/automan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chinjiaqing/automan/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {
