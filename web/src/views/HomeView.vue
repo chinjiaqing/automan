@@ -26,7 +26,7 @@
             :class="getDeviceStatusIcon(device)"
           />
           <span class="flex-1 text-sm truncate">{{ device.name }}</span>
-          <div class="hidden group-hover:flex items-center gap-0.5">
+          <div v-if="!isDeviceActive(device.id)" class="hidden group-hover:flex items-center gap-0.5">
             <Button text rounded severity="secondary" size="small" icon="pi pi-pencil" title="重命名" @click.stop="openEdit(device)" />
             <Button text rounded severity="danger" size="small" icon="pi pi-trash" title="删除" @click.stop="confirmDelete(device)" />
           </div>
@@ -133,6 +133,12 @@ const isPaused = computed(() => {
   if (!selectedId.value) return false
   return deviceRunStatusMap.value.get(selectedId.value)?.status === DeviceRunStatus.PAUSED
 })
+
+/** 设备是否有活跃的工作流（运行中或暂停） */
+function isDeviceActive(deviceId: string): boolean {
+  const status = deviceRunStatusMap.value.get(deviceId)?.status
+  return status === DeviceRunStatus.RUNNING || status === DeviceRunStatus.PAUSED || status === DeviceRunStatus.ERROR
+}
 
 /** 设备状态图标：结合模拟器状态 + 工作流运行状态 */
 function getDeviceStatusIcon(device: DeviceInfo) {
