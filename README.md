@@ -40,11 +40,11 @@
 
 <div align="center">
 
-<img src="screenshots/Snipaste_2026-07-13_18-02-15.png" alt="截图1" width="600" />
+<img src="screenshots/Snipaste_2026-07-14_00-58-27.png" alt="截图1" width="600" />
 
-<img src="screenshots/Snipaste_2026-07-13_18-04-39.png" alt="截图2" width="600" />
+<img src="screenshots/Snipaste_2026-07-14_00-59-10.png" alt="截图2" width="600" />
 
-<img src="screenshots/Snipaste_2026-07-13_18-06-25.png" alt="截图3" width="600" />
+<img src="screenshots/Snipaste_2026-07-14_00-59-27.png" alt="截图3" width="600" />
 
 </div>
 
