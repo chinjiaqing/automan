@@ -81,12 +81,31 @@ Write-Host "  Automan - Production Setup" -ForegroundColor Yellow
 Write-Host "============================================" -ForegroundColor Yellow
 Write-Host ""
 
-# ── Step 1: Node.js ─────────────────────────────────────
+# ── Step 1: Git pull ───────────────────────────────────────
+
+Write-Step "[1/6] Pulling latest code from master..."
+
+if (-not (Test-Path (Join-Path $ROOT '.git'))) {
+    Write-Ok "Not a git repo, skip pull"
+} else {
+    & git -C $ROOT stash --include-untracked 2>&1 | Out-Null
+    & git -C $ROOT checkout master 2>&1 | Out-Null
+    & git -C $ROOT pull origin master 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        & git -C $ROOT stash pop 2>&1 | Out-Null
+        Write-Err "Git pull failed, running with existing code"
+    } else {
+        & git -C $ROOT stash pop 2>&1 | Out-Null
+        Write-Ok "Code updated to latest master"
+    }
+}
+
+# ── Step 2: Node.js ─────────────────────────────────────
 
 if (Test-Path $NODE_EXE) {
     Write-Ok "Node.js $((& $NODE_EXE -v 2>&1))"
 } else {
-    Write-Step "[1/5] Downloading Node.js $NODE_VER..."
+    Write-Step "[2/6] Downloading Node.js $NODE_VER..."
     $zipPath = Join-Path $DOTBIN $NODE_ZIP
     if (-not (Download-File -Urls $NODE_URLS -Dest $zipPath)) { exit 1 }
     Write-Host "  Extracting..."
@@ -106,12 +125,12 @@ if (Test-Path $NODE_EXE) {
 
 $env:PATH = "$NODE_DIR;$env:PATH"
 
-# ── Step 2: Python ──────────────────────────────────────
+# ── Step 3: Python ──────────────────────────────────────
 
 if (Test-Path $PY_EXE) {
     Write-Ok "Python $((& $PY_EXE --version 2>&1))"
 } else {
-    Write-Step "[2/5] Downloading Python $PY_VER embeddable..."
+    Write-Step "[3/6] Downloading Python $PY_VER embeddable..."
     $zipPath = Join-Path $DOTBIN $PY_ZIP
     if (-not (Download-File -Urls $PY_URLS -Dest $zipPath)) { exit 1 }
     Write-Host "  Extracting..."
@@ -145,9 +164,9 @@ Lib\site-packages
 
 $env:PATH = "$PY_DIR;$PY_DIR\Scripts;$env:PATH"
 
-# ── Step 3: pnpm + Node.js deps ─────────────────────────
+# ── Step 4: pnpm + Node.js deps ─────────────────────────
 
-Write-Step "[3/5] Installing Node.js dependencies..."
+Write-Step "[4/6] Installing Node.js dependencies..."
 
 # Force allow all build scripts
 $env:CI = 'false'
@@ -175,17 +194,17 @@ try { & $NODE_EXE @approveArgs 2>&1 | Out-Null } catch { }
 
 Write-Ok "Node.js dependencies"
 
-# ── Step 4: Python deps ─────────────────────────────────
+# ── Step 5: Python deps ─────────────────────────────────
 
-Write-Step "[4/5] Installing Python dependencies..."
+Write-Step "[5/6] Installing Python dependencies..."
 $reqFile = Join-Path $ROOT 'server\src\libs\requirements.txt'
 & $PY_EXE -m pip install -r $reqFile --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple 2>&1 | Out-Null
 Write-Ok "Python dependencies"
 
-# ── Step 5: Build & Start ───────────────────────────────
+# ── Step 6: Build & Start ───────────────────────────────
 
 Write-Host ""
-Write-Step "[5/5] Building web application..."
+Write-Step "[6/6] Building web application..."
 Write-Host ""
 
 $buildArgs = @($COREPACK, 'pnpm', '--filter', '@automan/web', 'build')
