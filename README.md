@@ -8,6 +8,8 @@
 
 可视化工作流编辑 · 截图驱动执行 · 多设备并发 · 实时监控
 
+> ⚠️ **技术栈说明**：本项目主体基于 Node.js 运行，Node.js 并非高性能方案，如需极致性能请考虑其他技术选型。
+
 [GitHub](https://github.com/chinjiaqing/automan)
 
 </div>
@@ -21,6 +23,20 @@
 通过 Web 页面管理多台模拟器设备，使用拖拽式节点编辑器构建工作流——识图、OCR、点击、条件判断、循环、随机等待等，系统以截图为输入自动驱动工作流执行。
 
 **适用场景**：游戏养号、UI 自动化、RPA 流程、定时重复任务。
+
+---
+
+## 应用截图
+
+<div align="center">
+
+<img src="screenshots/Snipaste_2026-07-13_18-02-15.png" alt="截图1" width="600" />
+
+<img src="screenshots/Snipaste_2026-07-13_18-04-39.png" alt="截图2" width="600" />
+
+<img src="screenshots/Snipaste_2026-07-13_18-06-25.png" alt="截图3" width="600" />
+
+</div>
 
 ---
 
@@ -150,6 +166,24 @@ start-dev.bat
 
 - [产品核心架构](docs/产品核心.md) — 技术架构与 API
 - [开发前必读](docs/开发前必读.md) — 开发约束与编码规范
+
+---
+
+## 友好交流
+
+欢迎加入 QQ 群交流讨论，扫码或搜索群号（1014163633）即可加入：
+
+<div align="center">
+
+<img src="screenshots/qq.jpg" alt="QQ群二维码" width="200" />
+
+</div>
+
+---
+
+## 声明
+
+**此项目仅作学习交流使用，请勿用作非法用途。**
 
 ---
 
