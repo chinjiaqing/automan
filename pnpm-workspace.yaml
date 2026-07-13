@@ -2,6 +2,10 @@ packages:
   - 'server'
   - 'shared'
   - 'web'
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  vue-demi: true
 onlyBuiltDependencies:
   '@u4/opencv4nodejs': true
   better-sqlite3: true
