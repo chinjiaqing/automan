@@ -1,5 +1,7 @@
 <template>
-  <div class="h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-gray-100">
+  <div
+    class="h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-gray-100"
+  >
     <div class="w-96 bg-white rounded-xl shadow-lg p-8">
       <!-- Logo -->
       <div class="text-center mb-8">
@@ -70,7 +72,9 @@ const cached = (() => {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) return JSON.parse(raw) as { host: string; port: number }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null
 })()
 
@@ -109,5 +113,16 @@ async function handleConnect() {
 // 如果已经连接，直接跳转
 if (state.value === 'connected') {
   router.replace({ name: 'home' })
+} else {
+  // 桌面版通过 URL query 注入连接参数（/login?port=3000&autoconnect=1）
+  const query = new URLSearchParams(location.search)
+  const qPort = Number(query.get('port'))
+  if (qPort >= 1 && qPort <= 65535) {
+    host.value = query.get('host') ?? '127.0.0.1'
+    port.value = qPort
+  }
+  if (query.get('autoconnect') === '1') {
+    void handleConnect()
+  }
 }
 </script>

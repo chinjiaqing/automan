@@ -1,0 +1,55 @@
+# electron-builder 配置
+# appId / productName 一经发布不可改（userData 路径与 NSIS 卸载定位挂在其上）
+appId: com.automan.desktop
+productName: Automan
+# 显式锁定，防止 workspace 结构下解析失败（与 devDependencies 中版本同步维护）
+electronVersion: 43.1.0
+npmRebuild: false
+
+directories:
+  output: release
+  buildResources: build
+
+# 主进程产物进 asar；desktop 包运行时依赖为零（bundle 自包含）
+files:
+  - dist/**
+  - package.json
+
+# sidecar 全家走 extraResources（子进程需要真实文件路径，不能进 asar）
+# 注意：electron-builder 在遍历层硬排除 node_modules 目录，
+# server/node_modules 由 scripts/after-pack.cjs 手动补拷
+extraResources:
+  - from: out/server
+    to: server
+  - from: ../web/dist
+    to: web
+
+afterPack: scripts/after-pack.cjs
+
+artifactName: ${productName}-Setup-${version}-${os}-${arch}.${ext}
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  extraResources:
+    - from: out/python
+      to: python
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+  shortcutName: 凹凸曼
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  # v1 不做正式签名/公证（electron-builder 对 arm64 自动 ad-hoc 签名）
+  identity: null

@@ -1,0 +1,34 @@
+{
+  "name": "@automan/desktop",
+  "version": "0.1.0",
+  "productName": "Automan",
+  "description": "Automan 桌面端 — Electron 壳 + Node sidecar",
+  "author": "chinjiaqing",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build:server": "node scripts/build-server.mjs",
+    "prune:modules": "node scripts/prune-modules.mjs",
+    "prepare:node": "node scripts/prepare-node.mjs",
+    "build:main": "node scripts/build-main.mjs",
+    "make:icons": "node scripts/make-icons.mjs",
+    "build:all": "pnpm build:server && pnpm prune:modules && pnpm prepare:node && pnpm build:main",
+    "smoke:server": "node scripts/smoke-server.mjs",
+    "smoke:app": "pnpm build:all && electron . --smoke",
+    "dev": "pnpm build:main && electron .",
+    "dist": "pnpm build:all && electron-builder --publish never",
+    "dist:mac": "pnpm build:all && electron-builder --mac --publish never",
+    "dist:win": "pnpm build:all && electron-builder --win --publish never",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.12",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.12",
+    "sharp": "^0.35.3",
+    "typescript": "^5.8.3"
+  }
+}

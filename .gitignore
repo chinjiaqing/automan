@@ -60,3 +60,12 @@ pnpm-debug.log*
 # ── 分发运行时（start.bat 自动下载，不提交） ──
 .bin/
 .venv/
+
+# desktop 打包产物
+desktop/release/
+desktop/vendor/
+
+# desktop 构建资源（图标/NSIS 脚本是源文件，非产物，豁免全局 build/ 与 *.png 规则）
+!desktop/build/
+!desktop/build/**/*.png
+!desktop/assets/**/*.png

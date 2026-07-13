@@ -14,16 +14,7 @@ import { logger } from '../core/logger.js'
 
 /** 预设颜色名称 */
 export type OcrColorPreset =
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'cyan'
-  | 'blue'
-  | 'purple'
-  | 'white'
-  | 'black'
-  | 'gray'
+  'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'white' | 'black' | 'gray'
 
 /** 颜色：预设名称 或 任意 hex (#RRGGBB / #RGB) 或 rgb (r,g,b) */
 export type OcrColor = OcrColorPreset | (string & {})
@@ -111,6 +102,11 @@ interface OcrPyOutput {
 /** OCR 持久化工作进程（模型只加载一次，后续调用直接通信） */
 const ocrWorker = new PythonWorker('ocr.py')
 
+/** 销毁 OCR 工作进程（服务关闭时调用，防止 python 进程残留） */
+export function destroyOcrWorker(): void {
+  ocrWorker.destroy()
+}
+
 /**
  * 获取文字（OCR 识别）
  *
@@ -132,12 +128,7 @@ const ocrWorker = new PythonWorker('ocr.py')
  * ```
  */
 export async function getWords(options: GetWordsOptions): Promise<GetWordsResult> {
-  const {
-    image,
-    region = [0, 0, 0, 0],
-    color,
-    colorTolerance = 50,
-  } = options
+  const { image, region = [0, 0, 0, 0], color, colorTolerance = 50 } = options
 
   if (!image) {
     throw new Error('image 为必填')

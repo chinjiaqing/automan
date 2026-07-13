@@ -17,6 +17,8 @@
   "scripts": {
     "dev:server": "pnpm --filter @automan/server dev",
     "dev:web": "pnpm --filter @automan/web dev",
+    "desktop:dev": "pnpm --filter @automan/desktop dev",
+    "desktop:dist": "pnpm --filter @automan/desktop dist",
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck"
   },

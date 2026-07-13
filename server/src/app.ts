@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyError } from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 
 // 插件
 import cors from '@fastify/cors'
@@ -22,8 +23,17 @@ import { WorkflowService } from './modules/workflow/service.js'
 import { WsMessageType } from '@automan/shared/types.js'
 
 // 数据库
-import { sqlite } from './db/index.js'
+import { sqlite, DATA_DIR } from './db/index.js'
 import { runMigrations } from './db/migrate.js'
+
+// Python worker 清理
+import { destroyOcrWorker } from './libs/index.js'
+
+// 应用指纹：桌面版主进程用它识别「同一数据目录的陈旧 sidecar」，与普通端口占用者区分
+const APP_FINGERPRINT = createHash('sha256')
+  .update(`automan:${DATA_DIR}`)
+  .digest('hex')
+  .slice(0, 16)
 
 // 路由模块
 import { deviceRoutes } from './routes/device.routes.js'
@@ -133,6 +143,9 @@ export async function createApp(): Promise<FastifyInstance> {
   app.get('/health', async () => {
     return {
       status: 'ok',
+      app: 'automan',
+      fingerprint: APP_FINGERPRINT,
+      pid: process.pid,
       uptime: process.uptime(),
       actors: actorManager.getActorCount(),
       wsClients: app.wsGateway.getConnectionCount(),
@@ -142,7 +155,10 @@ export async function createApp(): Promise<FastifyInstance> {
 
   // ── 静态文件路径 ────────────────────────────
   const isProduction = process.env.NODE_ENV === 'production'
-  const webDist = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist')
+  // 静态目录：AUTOMAN_WEB_DIST 环境变量优先（桌面版打包后注入），默认 <repo>/web/dist
+  const webDist =
+    process.env.AUTOMAN_WEB_DIST ??
+    resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist')
 
   // 非生产模式下提供根路由
   if (!isProduction) {
@@ -166,7 +182,11 @@ export async function createApp(): Promise<FastifyInstance> {
     })
     // SPA 回退：未匹配的 GET 路由返回 index.html
     app.setNotFoundHandler((request, reply) => {
-      if (request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/ws')) {
+      if (
+        request.method === 'GET' &&
+        !request.url.startsWith('/api/') &&
+        !request.url.startsWith('/ws')
+      ) {
         return reply.sendFile('index.html')
       }
       reply.status(404).send({ statusCode: 404, code: 'NOT_FOUND', message: 'Not Found' })
@@ -205,6 +225,7 @@ export async function createApp(): Promise<FastifyInstance> {
     app.log.info('Shutting down — destroying all actors...')
     await actorManager.destroyAll()
     await workflowService.stopAll()
+    destroyOcrWorker()
     sqlite.close()
     app.log.info('Database connection closed')
   })

@@ -23,7 +23,7 @@ export { findPicPro } from './find-pic-pro.js'
 export type { FindPicProOptions, FindPicProMatch, FindPicProResult } from './find-pic-pro.js'
 
 // ── OCR API ───────────────────────────────────
-export { getWords, findStr } from './ocr.js'
+export { getWords, findStr, destroyOcrWorker } from './ocr.js'
 export type {
   GetWordsOptions,
   GetWordsResult,

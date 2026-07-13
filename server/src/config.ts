@@ -28,7 +28,9 @@ const DEFAULT_CONFIG: AutomanConfig = {
 }
 
 function loadConfig(): AutomanConfig {
-  const configPath = resolve(__dirname, '..', 'automan.config.json5')
+  // 配置路径：AUTOMAN_CONFIG_PATH 环境变量优先（桌面版打包后注入），默认 server/automan.config.json5
+  const configPath =
+    process.env.AUTOMAN_CONFIG_PATH ?? resolve(__dirname, '..', 'automan.config.json5')
   try {
     const raw = readFileSync(configPath, 'utf-8')
     const parsed = JSON5.parse<Partial<AutomanConfig>>(raw)

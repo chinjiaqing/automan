@@ -10,8 +10,11 @@ import { fileURLToPath } from 'node:url'
 import * as schema from './schema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-// 数据库文件：项目根目录/data/automan.db
-const DB_PATH = resolve(__dirname, '..', '..', '..', '..', 'data', 'automan.db')
+// 数据目录：AUTOMAN_DATA_DIR 环境变量优先（桌面版注入用户数据目录），默认项目根目录/data
+export const DATA_DIR = resolve(
+  process.env.AUTOMAN_DATA_DIR ?? resolve(__dirname, '..', '..', '..', '..', 'data'),
+)
+const DB_PATH = resolve(DATA_DIR, 'automan.db')
 
 // 确保 data/ 目录存在
 mkdirSync(dirname(DB_PATH), { recursive: true })

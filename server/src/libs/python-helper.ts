@@ -37,9 +37,11 @@ const VENV_PYTHON = join(SERVER_ROOT, '.venv', 'Scripts', 'python.exe')
 
 /**
  * 获取 Python 可执行文件路径
- * 优先级：.bin/python/ (分发) > .venv/ (开发) > 系统 python
+ * 优先级：AUTOMAN_PYTHON_PATH 环境变量（桌面版注入）> .bin/python/ (分发) > .venv/ (开发) > 系统 python
  */
 export function getPythonPath(): string {
+  const envPython = process.env.AUTOMAN_PYTHON_PATH
+  if (envPython && existsSync(envPython)) return envPython
   if (existsSync(DOTBIN_PYTHON)) return DOTBIN_PYTHON
   if (existsSync(VENV_PYTHON)) return VENV_PYTHON
   return 'python'
@@ -77,6 +79,7 @@ export function runPythonScript<T extends PyOutput = PyOutput>(
     const py = spawn(pythonPath, [scriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      windowsHide: true,
     })
 
     let stdout = ''
@@ -103,13 +106,9 @@ export function runPythonScript<T extends PyOutput = PyOutput>(
     })
 
     py.on('error', (err) => {
-      done(
-        {
-          error:
-            `Python 启动失败: ${err.message}。` +
-            `请确保已运行 start.bat 初始化环境`,
-        } as T,
-      )
+      done({
+        error: `Python 启动失败: ${err.message}。` + `请确保已运行 start.bat 初始化环境`,
+      } as T)
     })
 
     py.on('close', (code) => {
@@ -175,6 +174,7 @@ export class PythonWorker {
       this.proc = spawn(pythonPath, ['-u', this.scriptPath, '--worker'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        windowsHide: true,
       })
 
       let stderrBuf = ''
@@ -264,6 +264,11 @@ export class PythonWorker {
         resolve({ error: `stdin 写入失败: ${(err as Error).message}` } as T)
       }
     })
+  }
+
+  /** 销毁工作进程（应用关闭时调用，防止 python 进程残留） */
+  destroy(): void {
+    this.killAll('worker destroyed')
   }
 
   /** 终止所有待处理请求并杀进程 */

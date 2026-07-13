@@ -2,12 +2,12 @@ packages:
   - 'server'
   - 'shared'
   - 'web'
-allowBuilds:
-  better-sqlite3: true
-  esbuild: true
-  vue-demi: true
+  - 'desktop'
+# 允许执行 postinstall 构建脚本的依赖白名单（pnpm 10/11 标准数组格式）
 onlyBuiltDependencies:
-  '@u4/opencv4nodejs': true
-  better-sqlite3: true
-  esbuild: true
-  winax: true
+  - '@u4/opencv4nodejs'
+  - better-sqlite3
+  - electron
+  - esbuild
+  - vue-demi
+  - winax

@@ -1,0 +1,106 @@
+# 桌面端出包：tag（v*）触发或手动触发
+# Windows → NSIS 安装包（内置 Python）；macOS → dmg（arm64，远程控制端定位）
+name: release-desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # 注意：sidecar 便携运行时复制自本 Node（prepare-node.mjs），
+      # 且原生模块 prebuild 与它 ABI 绑定——install 与打包必须同一个 Node
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        run: pnpm --filter @automan/web build
+
+      - name: Build sidecar (bundle + native modules + portable node)
+        run: pnpm --filter @automan/desktop build:all
+
+      - name: Smoke test sidecar artifact
+        run: pnpm --filter @automan/desktop smoke:server
+
+      - name: Prepare embedded Python
+        run: powershell -ExecutionPolicy Bypass -File desktop/scripts/prepare-python.ps1
+
+      - name: Build NSIS installer
+        run: pnpm --filter @automan/desktop exec electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: desktop/release/*.exe
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        run: pnpm --filter @automan/web build
+
+      - name: Build sidecar (bundle + native modules + portable node)
+        run: pnpm --filter @automan/desktop build:all
+
+      - name: Smoke test sidecar artifact
+        run: pnpm --filter @automan/desktop smoke:server
+
+      - name: Build dmg
+        run: pnpm --filter @automan/desktop exec electron-builder --mac --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer
+          path: desktop/release/*.dmg
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/*
