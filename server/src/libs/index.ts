@@ -38,6 +38,9 @@ export type {
 export { adbClick, adbAreaClick } from './adb-click.js'
 export type { AdbClickResult } from './adb-click.js'
 
+// ── ADB 拟人滑动 API ────────────────────────
+export { adbSwipe, computeSwipeTrajectory } from './adb-swipe.js'
+
 // ── ADB 应用控制 API ───────────────────────────
 export { adbLaunchApp, adbKillApp, adbIsAppRunning } from './adb-app.js'
 

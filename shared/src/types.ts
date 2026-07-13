@@ -385,6 +385,37 @@ export interface AdbClickResponse {
   elapsed: number
 }
 
+/** 滑动轨迹点 */
+export interface SwipePoint {
+  x: number
+  y: number
+  /** 累计时间（ms），从起点算起 */
+  t: number
+}
+
+/** 拟人滑动请求 */
+export interface AdbSwipeRequest {
+  deviceId: string
+  startRegion: [number, number, number, number]
+  endRegion: [number, number, number, number]
+  /** 区域边界安全偏移（默认 0） */
+  padding?: number
+  /** 分段数（默认 12~20 随机） */
+  steps?: number
+}
+
+/** 滑动响应 */
+export interface AdbSwipeResponse {
+  startX: number
+  startY: number
+  endX: number
+  endY: number
+  steps: number
+  elapsed: number
+  /** 完整轨迹点（含起点），前端可直接用于动画绘制 */
+  trajectory: SwipePoint[]
+}
+
 // ─────────────────────────────────────────
 // Workflow 工作流
 // ─────────────────────────────────────────
@@ -572,7 +603,7 @@ export interface WorkflowStatusPayload {
 // ─────────────────────────────────────────
 
 /** 注解类型枚举 */
-export type VisualAnnotationType = 'bbox' | 'click' | 'area' | 'text'
+export type VisualAnnotationType = 'bbox' | 'click' | 'area' | 'text' | 'swipe'
 
 /** 通用视觉注解 */
 export interface VisualAnnotation {

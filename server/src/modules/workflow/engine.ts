@@ -10,6 +10,7 @@ import { findPicPro } from '../../libs/find-pic-pro.js'
 import { getWords } from '../../libs/ocr.js'
 import { findStr } from '../../libs/ocr.js'
 import { adbClick, adbAreaClick } from '../../libs/adb-click.js'
+import { adbSwipe } from '../../libs/adb-swipe.js'
 import { adbLaunchApp, adbKillApp, adbIsAppRunning } from '../../libs/adb-app.js'
 
 /** 从 data URL (base64 PNG) 解析图片尺寸 */
@@ -26,7 +27,7 @@ function parsePngSizeFromDataUrl(dataUrl: string): { width: number; height: numb
 
 /** 原始视觉注解（引擎层，不含工作流信息） */
 export interface RawAnnotation {
-  type: 'bbox' | 'click' | 'area' | 'text'
+  type: 'bbox' | 'click' | 'area' | 'text' | 'swipe'
   nodeId: string
   label: string
   data: Record<string, unknown>
@@ -220,6 +221,11 @@ export class WorkflowEngine {
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
+          case 'swipe':
+            await this.execSwipe(node, ctx, emit)
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+
           case 'delay': {
             const ms = Number(node.config.ms ?? 1000)
             emit('debug', `等待 ${ms}ms`)
@@ -336,6 +342,14 @@ export class WorkflowEngine {
     let result: number
 
     switch (action) {
+      case 'init':
+        // 仅在变量不存在时初始化（session 跨轮持久化场景）
+        if (varName in ctx.variables) {
+          result = current
+        } else {
+          result = Number(resolveValue(value, ctx.outputs)) || 0
+        }
+        break
       case 'set':
         result = Number(resolveValue(value, ctx.outputs)) || 0
         break
@@ -441,6 +455,10 @@ export class WorkflowEngine {
             break
           case 'areaClick':
             await this.execAreaClick(innerNode, ctx)
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          case 'swipe':
+            await this.execSwipe(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'delay': {
@@ -657,6 +675,47 @@ export class WorkflowEngine {
       nodeId: node.id,
       label: node.label || 'areaClick',
       data: { region, clickX: cx, clickY: cy },
+    })
+  }
+
+  /** 拟人滑动节点 */
+  private async execSwipe(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
+    const startRegion = clampRegion(
+      resolveRegion(node.config.startRegion, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
+    const endRegion = clampRegion(
+      resolveRegion(node.config.endRegion, ctx.outputs),
+      ctx.screenshotWidth,
+      ctx.screenshotHeight,
+    )
+    const padding = Number(node.config.padding ?? 0)
+
+    const result = await adbSwipe(ctx.adbPath, ctx.adbTarget, startRegion, endRegion, { padding })
+
+    ctx.outputs[node.id] = {
+      startX: result.startX,
+      startY: result.startY,
+      endX: result.endX,
+      endY: result.endY,
+      steps: result.steps,
+    }
+
+    emit('info', `滑动 (${result.startX},${result.startY}) → (${result.endX},${result.endY}) ${result.steps}段 ${result.elapsed}ms`)
+
+    // 视觉注解：滑动轨迹
+    ctx.annotations.push({
+      type: 'swipe',
+      nodeId: node.id,
+      label: node.label || 'swipe',
+      data: {
+        startX: result.startX,
+        startY: result.startY,
+        endX: result.endX,
+        endY: result.endY,
+        trajectory: result.trajectory,
+      },
     })
   }
 }

@@ -124,9 +124,39 @@
           />
         </div>
       </div>
-    </div>
 
-    <!-- 右侧截屏区 -->
+      <!-- 拟真滑动调试区 -->
+      <div class="border-t border-gray-200 pt-3 flex flex-col gap-2">
+        <div class="flex items-center gap-1.5 mb-1">
+          <i class="pi pi-arrows-alt text-sm text-gray-500" />
+          <span class="text-sm font-medium text-gray-600">拟真滑动</span>
+        </div>
+        <InputText
+          v-model="swipeStart"
+          placeholder="起点区域 [x1, y1, x2, y2]"
+          class="w-full font-mono"
+          size="small"
+        />
+        <InputText
+          v-model="swipeEnd"
+          placeholder="终点区域 [x1, y1, x2, y2]"
+          class="w-full font-mono"
+          size="small"
+        />
+        <Button
+          :icon="swipeLoading ? 'pi pi-spinner pi-spin' : 'pi pi-arrows-alt'"
+          :label="swipeLoading ? '滑动中...' : '滑动'"
+          :disabled="!selectedDeviceId || swipeLoading"
+          @click="handleSwipe"
+          size="small"
+        />
+        <!-- 滑动轨迹信息 -->
+        <div v-if="swipeResult" class="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1">
+          <div>起点 ({{ swipeResult.startX }}, {{ swipeResult.startY }}) → 终点 ({{ swipeResult.endX }}, {{ swipeResult.endY }})</div>
+          <div>分段 {{ swipeResult.steps }} · {{ swipeResult.elapsed }}ms · 轨迹点 {{ swipeResult.trajectory.length }}</div>
+        </div>
+      </div>
+    </div>
     <div class="flex-1 flex flex-col bg-gray-100 overflow-hidden relative">
       <!-- 工具栏 -->
       <div class="h-[52px] flex-shrink-0 bg-white border-b border-gray-200 flex items-center justify-center px-4 gap-4">
@@ -241,6 +271,47 @@
             #{{ i + 1 }} {{ m.confidence }}
           </span>
         </div>
+
+        <!-- 滑动轨迹 SVG -->
+        <svg
+          v-if="swipeTrajectoryVisible && swipeTrajectoryPath"
+          class="absolute inset-0 pointer-events-none"
+          :width="imgDisplaySize.width"
+          :height="imgDisplaySize.height"
+          style="z-index: 15;"
+        >
+          <!-- 轨迹线 -->
+          <path
+            :d="swipeTrajectoryPath"
+            fill="none"
+            stroke="#3b82f6"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-dasharray="8,4"
+            class="swipe-path-animate"
+          />
+          <!-- 起点圆点 -->
+          <circle
+            v-if="swipeResult"
+            :cx="(swipeResult.startX * imgDisplaySize.width) / (screenshot?.width || 1)"
+            :cy="(swipeResult.startY * imgDisplaySize.height) / (screenshot?.height || 1)"
+            r="6"
+            fill="#22c55e"
+            stroke="white"
+            stroke-width="2"
+          />
+          <!-- 终点圆点 -->
+          <circle
+            v-if="swipeResult"
+            :cx="(swipeResult.endX * imgDisplaySize.width) / (screenshot?.width || 1)"
+            :cy="(swipeResult.endY * imgDisplaySize.height) / (screenshot?.height || 1)"
+            r="6"
+            fill="#ef4444"
+            stroke="white"
+            stroke-width="2"
+          />
+        </svg>
       </div>
       </div>
 
@@ -339,6 +410,18 @@ const clickPoint = ref('[0, 0]')
 const clickArea = ref('[0, 0, 0, 0]')
 const clickLoading = ref(false)
 
+// ── 拟真滑动 ──
+const swipeStart = ref('[100, 800, 400, 1000]')
+const swipeEnd = ref('[100, 200, 400, 400]')
+const swipeLoading = ref(false)
+const swipeResult = ref<{
+  startX: number; startY: number; endX: number; endY: number
+  steps: number; elapsed: number; trajectory: { x: number; y: number; t: number }[]
+} | null>(null)
+/** 轨迹动画 SVG path */
+const swipeTrajectoryPath = ref('')
+const swipeTrajectoryVisible = ref(false)
+
 function parseCoord(input: string, expected: number): number[] | null {
   const nums = input.replace(/[\[\]\s]/g, '').split(',').map(Number)
   if (nums.length !== expected || nums.some(isNaN)) return null
@@ -391,6 +474,53 @@ async function handleAreaClick() {
   } finally {
     clickLoading.value = false
   }
+}
+
+async function handleSwipe() {
+  const start = parseCoord(swipeStart.value, 4)
+  const end = parseCoord(swipeEnd.value, 4)
+  if (!start || !end) {
+    showToast('坐标格式错误，请输入 [x1, y1, x2, y2]')
+    return
+  }
+  swipeLoading.value = true
+  swipeResult.value = null
+  swipeTrajectoryVisible.value = false
+  try {
+    const res = await deviceApi.swipe({
+      deviceId: selectedDeviceId.value,
+      startRegion: [start[0], start[1], start[2], start[3]],
+      endRegion: [end[0], end[1], end[2], end[3]],
+    })
+    if (res.success) {
+      swipeResult.value = res.data
+      showToast(`滑动完成 ${res.data.steps} 段, ${res.data.elapsed}ms`)
+      // 生成 SVG path 并显示轨迹动画
+      showSwipeTrajectory(res.data.trajectory)
+    } else {
+      showToast('message' in res ? res.message : '滑动失败')
+    }
+  } catch {
+    showToast('滑动请求失败')
+  } finally {
+    swipeLoading.value = false
+  }
+}
+
+function showSwipeTrajectory(trajectory: { x: number; y: number; t: number }[]) {
+  if (!screenshot.value || !imgDisplaySize.value.width) return
+  const sx = imgDisplaySize.value.width / screenshot.value.width
+  const sy = imgDisplaySize.value.height / screenshot.value.height
+  // 将原始坐标映射到显示坐标，生成 SVG path
+  const points = trajectory.map(p => ({ x: p.x * sx, y: p.y * sy }))
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x} ${points[i].y}`
+  }
+  swipeTrajectoryPath.value = d
+  swipeTrajectoryVisible.value = true
+  // 2秒后自动消失
+  setTimeout(() => { swipeTrajectoryVisible.value = false }, 2000)
 }
 
 // ── 找图结果覆盖层 ──
@@ -458,5 +588,14 @@ function onImageLoad(e: Event) {
 .toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(8px);
+}
+
+/* 滑动轨迹线动画 */
+.swipe-path-animate {
+  animation: swipe-dash 0.6s ease-out forwards;
+}
+@keyframes swipe-dash {
+  from { stroke-dashoffset: 200; opacity: 0.3; }
+  to   { stroke-dashoffset: 0;   opacity: 1; }
 }
 </style>

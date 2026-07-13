@@ -17,6 +17,8 @@ import type {
   AdbClickRequest,
   AdbAreaClickRequest,
   AdbClickResponse,
+  AdbSwipeRequest,
+  AdbSwipeResponse,
 } from '@automan/shared/types.js'
 
 export const deviceApi = {
@@ -64,6 +66,10 @@ export const deviceApi = {
   /** ADB 范围随机点击 */
   areaClick: (data: AdbAreaClickRequest) =>
     api.post<AdbClickResponse>('/api/devices/area-click', data),
+
+  /** ADB 拟人滑动 */
+  swipe: (data: AdbSwipeRequest) =>
+    api.post<AdbSwipeResponse>('/api/devices/swipe', data),
 }
 
 /** 文件系统浏览 */

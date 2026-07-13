@@ -71,6 +71,46 @@
             <span class="exec-ann__ripple" />
           </div>
         </template>
+
+        <!-- swipe: 拟人滑动轨迹 -->
+        <template v-else-if="ann.type === 'swipe'">
+          <svg
+            class="exec-swipe-svg"
+            :viewBox="`0 0 ${screenshot?.width || 1} ${screenshot?.height || 1}`"
+            preserveAspectRatio="none"
+          >
+            <path
+              :d="swipePath(ann.data.trajectory as any[])"
+              fill="none"
+              stroke="#3b82f6"
+              stroke-width="4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-dasharray="10,5"
+              class="exec-swipe-path"
+            />
+            <circle
+              :cx="(ann.data.startX as number)"
+              :cy="(ann.data.startY as number)"
+              r="8"
+              fill="#22c55e"
+              stroke="white"
+              stroke-width="2"
+            />
+            <circle
+              :cx="(ann.data.endX as number)"
+              :cy="(ann.data.endY as number)"
+              r="8"
+              fill="#ef4444"
+              stroke="white"
+              stroke-width="2"
+            />
+          </svg>
+          <span
+            class="exec-swipe-label"
+            :style="{ left: `${(ann.data.startX as number) * sx}px`, top: `${((ann.data.startY as number) - 20) * sy}px` }"
+          >{{ ann.label }}</span>
+        </template>
       </template>
       </template>
 
@@ -220,6 +260,16 @@ function areaStyle(region: number[]): CSSProperties {
     width: `${(x2 - x1) * sx.value}px`,
     height: `${(y2 - y1) * sy.value}px`,
   }
+}
+
+/** 生成滑动轨迹 SVG path（基于截图坐标系） */
+function swipePath(trajectory: { x: number; y: number; t: number }[]): string {
+  if (!trajectory || trajectory.length < 2) return ''
+  let d = `M ${trajectory[0].x} ${trajectory[0].y}`
+  for (let i = 1; i < trajectory.length; i++) {
+    d += ` L ${trajectory[i].x} ${trajectory[i].y}`
+  }
+  return d
 }
 
 /**
@@ -374,5 +424,37 @@ async function onCanvasClick(event: MouseEvent) {
 
 .exec-ann--area .exec-ann__label {
   background: #f59e0b;
+}
+
+/* ── 滑动轨迹 ── */
+.exec-swipe-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.exec-swipe-path {
+  animation: swipe-dash-exec 0.6s ease-out forwards;
+}
+
+@keyframes swipe-dash-exec {
+  from { stroke-dashoffset: 300; opacity: 0.3; }
+  to   { stroke-dashoffset: 0;   opacity: 1; }
+}
+
+.exec-swipe-label {
+  position: absolute;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  color: white;
+  background: #3b82f6;
+  pointer-events: none;
+  z-index: 7;
 }
 </style>

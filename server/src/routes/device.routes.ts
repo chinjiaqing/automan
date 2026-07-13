@@ -21,11 +21,12 @@ import type {
   FindStrRequest,
   AdbClickRequest,
   AdbAreaClickRequest,
+  AdbSwipeRequest,
 } from '@automan/shared/types.js'
 import { DeviceStatus } from '@automan/shared/types.js'
 import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
-import { findPic, findPicPro, getWords, findStr, adbClick, adbAreaClick } from '../libs/index.js'
+import { findPic, findPicPro, getWords, findStr, adbClick, adbAreaClick, adbSwipe } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
 function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
@@ -438,6 +439,43 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
           success: false,
           code: 'ADB_AREA_CLICK_FAILED',
           message: err instanceof Error ? err.message : '范围点击失败',
+        })
+      }
+    },
+  )
+  // ── ADB 拟人滑动 ───────────────────────
+  app.post<{ Body: AdbSwipeRequest }>(
+    '/api/devices/swipe',
+    async (request, reply) => {
+      const { deviceId, startRegion, endRegion, padding, steps } = request.body
+      if (!deviceId || !startRegion || !endRegion) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PARAMS',
+          message: 'deviceId、startRegion、endRegion 均为必填',
+        })
+      }
+
+      const device = db.select().from(devices).where(eq(devices.id, deviceId)).get()
+      if (!device) {
+        return reply.status(404).send({
+          success: false,
+          code: 'NOT_FOUND',
+          message: `设备 ${deviceId} 不存在`,
+        })
+      }
+
+      try {
+        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
+        const target = adbService.getTarget(device.instanceIndex)
+        await adbService.connect(adbPath, target)
+        const result = await adbSwipe(adbPath, target, startRegion, endRegion, { padding, steps })
+        return { success: true as const, data: result }
+      } catch (err) {
+        return reply.status(500).send({
+          success: false,
+          code: 'ADB_SWIPE_FAILED',
+          message: err instanceof Error ? err.message : '滑动失败',
         })
       }
     },
