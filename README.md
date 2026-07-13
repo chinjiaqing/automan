@@ -46,6 +46,8 @@
 
 <img src="screenshots/Snipaste_2026-07-14_00-59-27.png" alt="截图3" width="600" />
 
+<img src="screenshots/Snipaste_2026-07-14_01-05-28.png" alt="截图4" width="600" />
+
 </div>
 
 ---
