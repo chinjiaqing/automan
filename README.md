@@ -30,11 +30,7 @@
 
 <div align="center">
 
-<a href="https://github.com/chinjiaqing/automan/blob/master/screenshots/2026713214452rec.mp4">
-  <img src="screenshots/Snipaste_2026-07-13_18-02-15.png" alt="演示视频" width="600" />
-  <br/>
-  ▶ 点击播放演示视频
-</a>
+<video src="https://github.com/user-attachments/assets/012dc44c-ed7a-4533-ae7a-9ef823f910d4" width="600" controls></video>
 
 </div>
 
