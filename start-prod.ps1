@@ -88,14 +88,21 @@ Write-Step "[1/6] Pulling latest code from master..."
 if (-not (Test-Path (Join-Path $ROOT '.git'))) {
     Write-Ok "Not a git repo, skip pull"
 } else {
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     & git -C $ROOT stash --include-untracked 2>&1 | Out-Null
     & git -C $ROOT checkout master 2>&1 | Out-Null
-    & git -C $ROOT pull origin master 2>&1
+    & git -C $ROOT pull origin master 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEAP
     if ($LASTEXITCODE -ne 0) {
+        $ErrorActionPreference = 'Continue'
         & git -C $ROOT stash pop 2>&1 | Out-Null
+        $ErrorActionPreference = $prevEAP
         Write-Err "Git pull failed, running with existing code"
     } else {
+        $ErrorActionPreference = 'Continue'
         & git -C $ROOT stash pop 2>&1 | Out-Null
+        $ErrorActionPreference = $prevEAP
         Write-Ok "Code updated to latest master"
     }
 }
