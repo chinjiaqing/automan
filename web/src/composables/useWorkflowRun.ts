@@ -339,6 +339,26 @@ export function useWorkflowRun() {
     logs.value = []
   }
 
+  /** 暂停设备截图 */
+  async function pauseDevice(deviceId: string) {
+    try {
+      await workflowApi.pause({ deviceId })
+      appendLog('info', `设备 ${deviceId} 已暂停`)
+    } catch (err) {
+      appendLog('error', `暂停失败: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /** 恢复设备截图 */
+  async function resumeDevice(deviceId: string) {
+    try {
+      await workflowApi.resume({ deviceId })
+      appendLog('info', `设备 ${deviceId} 已恢复`)
+    } catch (err) {
+      appendLog('error', `恢复失败: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   // WS 监听器是模块级单例，不应在组件卸载时移除
   // 它们在模块加载时注册，整个应用生命周期有效
 
@@ -359,6 +379,8 @@ export function useWorkflowRun() {
     getCheckedIds,
     startAll,
     stopAll,
+    pauseDevice,
+    resumeDevice,
     clearLogs,
     restoreState,
   }

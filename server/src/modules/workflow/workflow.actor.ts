@@ -97,9 +97,20 @@ export class WorkflowActor extends ActorBase {
 
   /**
    * 定时模式专用：由 CronManager 回调调用
-   * 仅当 flowState === 'idle' 时标记为 'pending'
+   * - idle 时标记为 pending
+   * - completed 时重置计数器并重新进入 pending（支持次日定时重触发）
    */
   markPending(): void {
+    if (this.flowState === 'completed') {
+      // 新一轮开始：重置计数器和取消标记
+      this.successCount = 0
+      this.failCount = 0
+      this.cancelled = false
+      this.flowState = 'pending'
+      this.sendLog('info', `定时信号到达（重置计数），等待下次截图执行`)
+      this.emitFlowState()
+      return
+    }
     if (this.flowState !== 'idle') {
       this.sendLog('debug', `markPending ignored: flowState=${this.flowState}`)
       return
@@ -114,6 +125,8 @@ export class WorkflowActor extends ActorBase {
   /** 收到截图 → 根据触发模式决定是否执行工作流 */
   private async onScreenshot(event: ScreenshotEvent): Promise<void> {
     if (!this.isRunning()) return
+    // 达标或已取消：不处理截图
+    if (this.flowState === 'completed' || this.cancelled) return
     if (this.busy) {
       this.sendLog('debug', `busy, skip screenshot handle #${this.executionCount + 1}`)
       return

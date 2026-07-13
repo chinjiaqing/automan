@@ -47,9 +47,12 @@
           :logs="logs"
           :checked-count="getCheckedCount(selectedDevice?.id ?? '')"
           :is-running="isRunning"
+          :is-paused="isPaused"
           :elapsed="elapsed"
           @start="handleStart"
           @stop="handleStop"
+          @pause="handlePause"
+          @resume="handleResume"
           @clear="clearLogs"
         >
           <!-- 实时看板：在操作按钮下方、日志上方 -->
@@ -96,7 +99,7 @@ import LogPanel from '../components/LogPanel.vue'
 import ExecutionViewer from '../components/ExecutionViewer.vue'
 
 const { devices, loading, fetchDevices, deleteDevice } = useDevices()
-const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, clearLogs } = useWorkflowRun()
+const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, pauseDevice, resumeDevice, clearLogs } = useWorkflowRun()
 
 const selectedId = ref('')
 const selectedDevice = computed(() => devices.value.find((d) => d.id === selectedId.value))
@@ -125,9 +128,16 @@ onMounted(async () => {
 const dialogVisible = ref(false)
 const editDevice = ref<DeviceInfo | null>(null)
 
+/** 当前设备是否处于暂停状态 */
+const isPaused = computed(() => {
+  if (!selectedId.value) return false
+  return deviceRunStatusMap.value.get(selectedId.value)?.status === DeviceRunStatus.PAUSED
+})
+
 /** 设备状态图标：结合模拟器状态 + 工作流运行状态 */
 function getDeviceStatusIcon(device: DeviceInfo) {
   const runStatus = deviceRunStatusMap.value.get(device.id)
+  if (runStatus?.status === DeviceRunStatus.PAUSED) return 'pi-pause-circle text-blue-500'
   if (runStatus?.status === DeviceRunStatus.RUNNING) return 'pi-circle-fill text-orange-500'
   if (runStatus?.status === DeviceRunStatus.ERROR) return 'pi-circle-fill text-red-500'
   if (device.status === 'running') return 'pi-circle-fill text-green-500'
@@ -175,6 +185,16 @@ async function handleStart() {
 
 async function handleStop() {
   await stopAll()
+}
+
+async function handlePause() {
+  if (!selectedDevice.value) return
+  await pauseDevice(selectedDevice.value.id)
+}
+
+async function handleResume() {
+  if (!selectedDevice.value) return
+  await resumeDevice(selectedDevice.value.id)
 }
 </script>
 

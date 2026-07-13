@@ -33,9 +33,11 @@ const DEFAULT_INTERVAL = config.screenshot.interval
 export class ScreenshotDispatcher {
   private adbService = new AdbService()
   private dispatchers = new Map<string, {
-    timer: ReturnType<typeof setInterval>
+    timer: ReturnType<typeof setInterval> | null
     device: DeviceScreenshotInfo
     subscribers: number
+    paused: boolean
+    interval: number
   }>()
 
   /** 为设备启动截图调度器（幂等） */
@@ -44,6 +46,8 @@ export class ScreenshotDispatcher {
       const d = this.dispatchers.get(device.id)!
       d.subscribers++
       logger.info('ScreenshotDispatcher', `device ${device.id} subscriber++ (total: ${d.subscribers})`)
+      // 如果处于暂停状态，自动恢复
+      if (d.paused) this.resume(device.id)
       return
     }
 
@@ -53,7 +57,7 @@ export class ScreenshotDispatcher {
       void this.captureAndDispatch(device)
     }, interval)
 
-    this.dispatchers.set(device.id, { timer, device, subscribers: 1 })
+    this.dispatchers.set(device.id, { timer, device, subscribers: 1, paused: false, interval })
   }
 
   /** 减少设备订阅计数，无订阅时停止 */
@@ -65,7 +69,7 @@ export class ScreenshotDispatcher {
     logger.info('ScreenshotDispatcher', `device ${deviceId} subscriber-- (total: ${d.subscribers})`)
 
     if (d.subscribers <= 0) {
-      clearInterval(d.timer)
+      if (d.timer) clearInterval(d.timer)
       this.dispatchers.delete(deviceId)
       logger.info('ScreenshotDispatcher', `stopped for device ${deviceId}`)
     }
@@ -74,7 +78,7 @@ export class ScreenshotDispatcher {
   /** 停止所有调度器 */
   stopAll(): void {
     for (const [id, d] of this.dispatchers) {
-      clearInterval(d.timer)
+      if (d.timer) clearInterval(d.timer)
       logger.info('ScreenshotDispatcher', `stopped for device ${id}`)
     }
     this.dispatchers.clear()
@@ -83,6 +87,27 @@ export class ScreenshotDispatcher {
   /** 获取活跃调度器数量 */
   getActiveCount(): number {
     return this.dispatchers.size
+  }
+
+  /** 暂停设备截图（保留 entry，仅停定时器） */
+  pause(deviceId: string): void {
+    const d = this.dispatchers.get(deviceId)
+    if (!d || d.paused) return
+    if (d.timer) clearInterval(d.timer)
+    d.timer = null
+    d.paused = true
+    logger.info('ScreenshotDispatcher', `paused for device ${deviceId}`)
+  }
+
+  /** 恢复设备截图（从暂停状态恢复） */
+  resume(deviceId: string): void {
+    const d = this.dispatchers.get(deviceId)
+    if (!d || !d.paused) return
+    d.timer = setInterval(() => {
+      void this.captureAndDispatch(d.device)
+    }, d.interval)
+    d.paused = false
+    logger.info('ScreenshotDispatcher', `resumed for device ${deviceId}`)
   }
 
   // ── 私有方法 ─────────────────────────────────

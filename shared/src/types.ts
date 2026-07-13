@@ -532,6 +532,11 @@ export interface StopWorkflowRequest {
   runId: string
 }
 
+/** 暂停/恢复设备请求 */
+export interface PauseDeviceRequest {
+  deviceId: string
+}
+
 /** 工作流运行实例信息 */
 export interface WorkflowRunInfo {
   runId: string
@@ -667,6 +672,7 @@ export interface CheckedWorkflowsSnapshot {
 export enum DeviceRunStatus {
   IDLE = 'idle',
   RUNNING = 'running',
+  PAUSED = 'paused',
   ERROR = 'error',
 }
 

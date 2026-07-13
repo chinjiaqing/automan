@@ -19,15 +19,34 @@
         :disabled="checkedCount === 0"
         @click="$emit('start')"
       />
-      <Button
-        v-else
-        text
-        severity="warn"
-        size="small"
-        icon="pi pi-stop"
-        label="停止"
-        @click="$emit('stop')"
-      />
+      <template v-else>
+        <Button
+          v-if="!isPaused"
+          text
+          severity="info"
+          size="small"
+          icon="pi pi-pause"
+          label="暂停"
+          @click="$emit('pause')"
+        />
+        <Button
+          v-else
+          text
+          severity="success"
+          size="small"
+          icon="pi pi-play"
+          label="恢复"
+          @click="$emit('resume')"
+        />
+        <Button
+          text
+          severity="warn"
+          size="small"
+          icon="pi pi-stop"
+          label="停止"
+          @click="$emit('stop')"
+        />
+      </template>
 
       <span class="text-xs text-gray-500 font-mono flex items-center">
         <i class="pi pi-clock mr-1" />{{ formatElapsed(elapsed) }}
@@ -77,12 +96,15 @@ const props = defineProps<{
   logs: readonly LogEntry[]
   checkedCount: number
   isRunning: boolean
+  isPaused: boolean
   elapsed: number
 }>()
 
 defineEmits<{
   start: []
   stop: []
+  pause: []
+  resume: []
   clear: []
 }>()
 

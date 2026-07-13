@@ -19,6 +19,7 @@ import type {
   CheckedWorkflowsSnapshot,
   SaveRunConfigRequest,
   WorkflowRunConfig,
+  PauseDeviceRequest,
 } from '@automan/shared/types.js'
 import type { WorkflowService } from '../modules/workflow/service.js'
 
@@ -201,6 +202,38 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
     }
     return { success: true as const, data: workflowService.listRuns() }
   })
+
+  // ── 暂停设备截图 ──────────────────────────────────
+  app.post<{ Body: PauseDeviceRequest }>(
+    '/api/workflows/pause',
+    async (request, reply) => {
+      if (!workflowService) {
+        return reply.status(503).send({ success: false, code: 'NOT_READY', message: 'WorkflowService 未初始化' })
+      }
+      const { deviceId } = request.body
+      if (!deviceId) {
+        return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 为必填' })
+      }
+      workflowService.pauseDevice(deviceId)
+      return { success: true as const, data: { deviceId } }
+    },
+  )
+
+  // ── 恢复设备截图 ──────────────────────────────────
+  app.post<{ Body: PauseDeviceRequest }>(
+    '/api/workflows/resume',
+    async (request, reply) => {
+      if (!workflowService) {
+        return reply.status(503).send({ success: false, code: 'NOT_READY', message: 'WorkflowService 未初始化' })
+      }
+      const { deviceId } = request.body
+      if (!deviceId) {
+        return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 为必填' })
+      }
+      workflowService.resumeDevice(deviceId)
+      return { success: true as const, data: { deviceId } }
+    },
+  )
 
   // ── 批量启动工作流（设备级） ─────────────────────
   app.post<{ Body: BatchRunWorkflowRequest }>(

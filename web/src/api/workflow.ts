@@ -13,6 +13,7 @@ import type {
   DeviceRunStatusInfo,
   SaveRunConfigRequest,
   WorkflowRunConfig,
+  PauseDeviceRequest,
 } from '@automan/shared/types.js'
 
 export const workflowApi = {
@@ -47,6 +48,14 @@ export const workflowApi = {
 
   /** 查询运行中的工作流 */
   running: () => api.get<WorkflowRunInfo[]>('/api/workflows/running'),
+
+  /** 暂停设备截图 */
+  pause: (data: PauseDeviceRequest) =>
+    api.post<{ deviceId: string }>('/api/workflows/pause', data),
+
+  /** 恢复设备截图 */
+  resume: (data: PauseDeviceRequest) =>
+    api.post<{ deviceId: string }>('/api/workflows/resume', data),
 
   /** 保存勾选快照 */
   saveChecked: (data: SaveCheckedWorkflowsRequest) =>

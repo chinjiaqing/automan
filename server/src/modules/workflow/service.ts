@@ -21,26 +21,37 @@ export class WorkflowService {
   private deviceSessions = new Map<string, DeviceSession>()
   /** 动态 cron 任务管理器 */
   private cronManager = new CronManager()
+  /** 手动暂停的设备集合 */
+  private pausedDevices = new Set<string>()
 
   constructor() {
-    // 监听 WORKFLOW_STATE 事件，检测 completed 自动清理
+    // cron 的生命周期由设备级 start/stop 控制，completed 不触发任何销毁
+    // 定时工作流达标后，cron 回调会自动重置计数并重新进入 pending
+
+    // 截图智能启停：所有状态变更统一通过 WORKFLOW_STATE 事件驱动
     eventBus.on(EventBusEvent.WORKFLOW_STATE, (payload: any) => {
-      if (payload?.flowState === 'completed') {
-        this.handleAutoCompleted(payload.runId, payload.workflowId, payload.deviceId)
+      if (payload?.deviceId) {
+        this.syncDispatcher(payload.deviceId)
       }
     })
   }
 
-  /** 处理自动停止（completed）的工作流 */
-  private async handleAutoCompleted(runId: string, workflowId: string, deviceId: string): Promise<void> {
-    logger.info('WorkflowService', `auto-completed: runId=${runId}, workflow=${workflowId}`)
-    // 注销 cron
-    this.cronManager.unregister(deviceId, workflowId)
-    // 停止 actor（走正常停止流程）
-    try {
-      await this.stopWorkflow(runId)
-    } catch {
-      // ignore
+  /** 截图启停唯一决策点：根据设备下所有 actor 状态决定是否需要截图 */
+  private syncDispatcher(deviceId: string): void {
+    // 手动暂停期间不自动恢复
+    if (this.pausedDevices.has(deviceId)) return
+
+    const deviceActors = [...this.actors.values()].filter(
+      (a) => a.getInfo().deviceId === deviceId,
+    )
+    if (deviceActors.length === 0) return
+
+    const needScreenshot = deviceActors.some((a) => a.getInfo().flowState !== 'completed')
+
+    if (needScreenshot) {
+      this.dispatcher.resume(deviceId)
+    } else {
+      this.dispatcher.pause(deviceId)
     }
   }
 
@@ -401,7 +412,7 @@ export class WorkflowService {
 
     return [...deviceMap.entries()].map(([deviceId, entry]) => ({
       deviceId,
-      status: entry.hasError ? DeviceRunStatus.ERROR : DeviceRunStatus.RUNNING,
+      status: this.resolveDeviceStatus(deviceId, entry.hasError),
       activeWorkflowCount: entry.runIds.length,
       runIds: entry.runIds,
       updatedAt: Date.now(),
@@ -426,11 +437,34 @@ export class WorkflowService {
     const hasError = deviceActors.some((a) => a.getInfo().state === 'error')
     return {
       deviceId,
-      status: hasError ? DeviceRunStatus.ERROR : DeviceRunStatus.RUNNING,
+      status: this.resolveDeviceStatus(deviceId, hasError),
       activeWorkflowCount: runIds.length,
       runIds,
       updatedAt: Date.now(),
     }
+  }
+
+  /** 解析设备状态：手动暂停 > 错误 > 运行中 */
+  private resolveDeviceStatus(deviceId: string, hasError: boolean): DeviceRunStatus {
+    if (this.pausedDevices.has(deviceId)) return DeviceRunStatus.PAUSED
+    if (hasError) return DeviceRunStatus.ERROR
+    return DeviceRunStatus.RUNNING
+  }
+
+  /** 手动暂停设备截图 */
+  pauseDevice(deviceId: string): void {
+    this.pausedDevices.add(deviceId)
+    this.dispatcher.pause(deviceId)
+    logger.info('WorkflowService', `device ${deviceId} paused by user`)
+    this.emitDeviceRunStatus(deviceId)
+  }
+
+  /** 手动恢复设备截图 */
+  resumeDevice(deviceId: string): void {
+    this.pausedDevices.delete(deviceId)
+    this.syncDispatcher(deviceId)
+    logger.info('WorkflowService', `device ${deviceId} resumed by user`)
+    this.emitDeviceRunStatus(deviceId)
   }
 
   /** 发出设备运行状态变更事件 */
