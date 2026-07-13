@@ -1,9 +1,12 @@
 <template>
   <div class="exec-viewer relative flex flex-col bg-gray-100">
     <!-- 左上角提示文案 -->
-    <div class="absolute top-1.5 left-2 z-10 text-xs text-gray-400 leading-tight pointer-events-none select-none">
-      <div>每2秒刷新</div>
-      <div>点击图片和操作模拟器</div>
+    <div class="absolute top-1.5 left-2 z-10 text-xs text-gray-400 leading-tight select-none">
+      <div>
+        每2秒刷新，
+        <a href="#" class="text-blue-400 hover:text-blue-600 pointer-events-auto" @click.prevent="manualRefresh">手动刷新</a>
+      </div>
+      <div>点击图片可实时操作模拟器</div>
     </div>
     <!-- 截图 + 注解叠加层 -->
     <div v-if="screenshot" ref="canvasRef" class="exec-viewer__canvas relative select-none mx-auto" @click="onCanvasClick">
@@ -110,6 +113,14 @@ interface ScreenshotInfo {
 interface AnnotationInfo {
   annotations: VisualAnnotation[]
   executionCount: number
+}
+
+const emit = defineEmits<{
+  manualRefresh: []
+}>()
+
+function manualRefresh() {
+  emit('manualRefresh')
 }
 
 const props = defineProps<{

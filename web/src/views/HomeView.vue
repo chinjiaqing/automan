@@ -56,7 +56,7 @@
           @clear="clearLogs"
         >
           <!-- 实时看板：在操作按钮下方、日志上方 -->
-          <ExecutionViewer :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" />
+          <ExecutionViewer :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" @manual-refresh="handleManualRefresh" />
         </LogPanel>
       </div>
     </template>
@@ -97,6 +97,7 @@ import DeviceDialog from '../components/DeviceDialog.vue'
 import WorkflowListPanel from '../components/WorkflowListPanel.vue'
 import LogPanel from '../components/LogPanel.vue'
 import ExecutionViewer from '../components/ExecutionViewer.vue'
+import { deviceApi } from '../api/device.js'
 
 const { devices, loading, fetchDevices, deleteDevice } = useDevices()
 const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, pauseDevice, resumeDevice, clearLogs } = useWorkflowRun()
@@ -115,6 +116,28 @@ const deviceAnnotations = computed(() => {
   if (!selectedId.value) return null
   return annotationMap.value.get(selectedId.value) ?? null
 })
+
+/** 手动刷新截图 */
+async function handleManualRefresh() {
+  if (!selectedId.value) return
+  try {
+    const res = await deviceApi.screenshot(selectedId.value)
+    if (!res.success) return
+    const data = res.data as { image: string; width: number; height: number; originalWidth: number; originalHeight: number; timestamp: number }
+    const m = new Map(screenshotMap.value)
+    m.set(selectedId.value, {
+      image: data.image,
+      width: data.width,
+      height: data.height,
+      originalWidth: data.originalWidth,
+      originalHeight: data.originalHeight,
+      timestamp: data.timestamp,
+    })
+    screenshotMap.value = m
+  } catch {
+    // 静默失败
+  }
+}
 
 onMounted(async () => {
   await fetchDevices()
