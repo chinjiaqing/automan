@@ -1,10 +1,10 @@
 <template>
-  <div class="wf-panel flex flex-col h-full bg-white border-r border-gray-200">
+  <div class="wf-panel flex flex-col h-full min-w-0 bg-white border-r border-gray-200">
     <div class="px-3 pt-3 pb-2">
       <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">工作流</span>
     </div>
 
-    <nav class="flex-1 overflow-y-auto px-2">
+    <nav class="flex-1 overflow-y-auto overflow-x-hidden px-2">
       <div v-if="workflows.length === 0" class="text-xs text-gray-400 text-center py-6">
         暂无工作流
       </div>
@@ -107,11 +107,10 @@
 
           <!-- 外部输入变量 -->
           <div v-if="expandedInputFields.length > 0" class="space-y-2">
-            <label class="text-gray-500 font-medium">外部输入</label>
+            <label class="text-gray-500 font-medium">脚本参数</label>
             <div v-for="field in expandedInputFields" :key="field.name" class="space-y-0.5">
-              <div class="flex items-center gap-1">
-                <span class="text-gray-600">{{ field.label }}</span>
-                <span class="text-gray-400">({{ field.name }})</span>
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="text-gray-600 truncate" :title="field.name">{{ field.label }}</span>
               </div>
               <InputText
                 v-model="configForm.inputValues[field.name]"
@@ -316,6 +315,15 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 展开配置区内的 PrimeVue 表单控件：填满容器且可收缩，避免窄侧栏溢出 */
+.wf-panel :deep(.p-inputtext),
+.wf-panel :deep(.p-select),
+.wf-panel :deep(.p-inputnumber),
+.wf-panel :deep(.p-datepicker) {
+  width: 100%;
+  min-width: 0;
+}
+
 .wf-switch {
   position: relative;
   width: 28px;

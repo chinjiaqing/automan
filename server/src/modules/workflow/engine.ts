@@ -71,12 +71,6 @@ export type LogFn = (level: string, message: string) => void
 
 /** 全局执行步数上限（防死循环） */
 const MAX_GLOBAL_STEPS = 5000
-
-/** 清理包名：去除首尾空白和多余冒号前缀 */
-function cleanPkgName(raw: unknown): string {
-  return String(raw ?? '').replace(/^[\s:]+/, '').trim()
-}
-
 /**
  * 解析 region 参数：支持数组格式（旧数据）和字符串格式（含引用）
  * 字符串格式如 "0,0,100,200" 或 "{{data_left.value}},{{data_top.value}},..."
@@ -251,7 +245,7 @@ export class WorkflowEngine {
           }
 
           case 'launchApp': {
-            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(node.config.packageName, ctx.outputs, ctx.variables) as string
             if (!pkg) throw new Error('启动应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -264,7 +258,7 @@ export class WorkflowEngine {
           }
 
           case 'killApp': {
-            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(node.config.packageName, ctx.outputs, ctx.variables) as string
             if (!pkg) throw new Error('关闭应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -277,7 +271,7 @@ export class WorkflowEngine {
           }
 
           case 'restartApp': {
-            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(node.config.packageName, ctx.outputs, ctx.variables) as string
             if (!pkg) throw new Error('重启应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -292,7 +286,7 @@ export class WorkflowEngine {
           }
 
           case 'appRunning': {
-            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(node.config.packageName, ctx.outputs, ctx.variables) as string
             if (!pkg) throw new Error('应用状态节点缺少包名')
             const running = await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg)
             emit('info', `[${nodeLabel(node)}] ${running}`)
@@ -495,7 +489,7 @@ export class WorkflowEngine {
             break
           }
           case 'launchApp': {
-            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
             if (pkg) {
               emit('info', `[${nodeLabel(innerNode)}] ${pkg}`)
               try { await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg) }
@@ -505,7 +499,7 @@ export class WorkflowEngine {
             break
           }
           case 'killApp': {
-            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
             if (pkg) {
               try { await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg) }
               catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
@@ -514,7 +508,7 @@ export class WorkflowEngine {
             break
           }
           case 'restartApp': {
-            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
             if (pkg) {
               try {
                 await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
@@ -528,7 +522,7 @@ export class WorkflowEngine {
             break
           }
           case 'appRunning': {
-            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
+            const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
             const running = pkg ? await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg) : false
             ctx.outputs[innerNode.id] = { running }
             nodeId = this.followEdge(innerNode.id, running ? 'true' : 'false', adj)

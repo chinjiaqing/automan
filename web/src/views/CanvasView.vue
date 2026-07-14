@@ -95,7 +95,7 @@
           <InputText
             v-model="clickPoint"
             placeholder="[x, y]"
-            class="flex-1 font-mono"
+            class="flex-1 font-mono min-w-0"
             size="small"
           />
           <Button
@@ -121,6 +121,7 @@
             :disabled="!selectedDeviceId || clickLoading"
             @click="handleAreaClick"
             size="small"
+            class="shrink-0"
           />
         </div>
       </div>
