@@ -266,7 +266,9 @@ export class WorkflowActor extends ActorBase {
 
   /** 初始化变量：local 重置，session 保留 */
   private initVariables(): Record<string, unknown> {
+    // session 变量预填充上次值，供 add/sub/createOrSet 等操作读取
     const vars: Record<string, unknown> = { ...this.sessionVars }
+    const inputValues = this.config.runConfig.inputValues ?? {}
 
     for (const node of this.config.workflow.nodes) {
       if (node.type !== 'variable') continue
@@ -275,12 +277,19 @@ export class WorkflowActor extends ActorBase {
       if (!varName) continue
 
       if (scope === 'session') {
-        // session 变量保持上次值（已在 sessionVars 中）
+        // session 变量：已有上次值则保留，否则用默认值初始化
         if (!(varName in vars)) {
           vars[varName] = value !== undefined ? Number(value) || 0 : 0
         }
+      } else if (scope === 'input') {
+        // input 变量：优先使用外部输入值，否则用默认值
+        if (varName in inputValues) {
+          vars[varName] = inputValues[varName]
+        } else {
+          vars[varName] = value !== undefined ? Number(value) || 0 : 0
+        }
       } else {
-        // local / input 变量重置
+        // local 变量：每次重置为默认值
         vars[varName] = value !== undefined ? Number(value) || 0 : 0
       }
     }

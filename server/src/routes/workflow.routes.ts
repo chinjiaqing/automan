@@ -12,6 +12,7 @@ import type {
   Workflow,
   WorkflowNode,
   WorkflowEdge,
+  InputField,
   RunWorkflowRequest,
   StopWorkflowRequest,
   BatchRunWorkflowRequest,
@@ -23,14 +24,34 @@ import type {
 } from '@automan/shared/types.js'
 import type { WorkflowService } from '../modules/workflow/service.js'
 
+/** 从 nodes 中提取 scope=input 的变量节点作为 inputFields */
+function extractInputFields(nodes: WorkflowNode[]): InputField[] {
+  const fields: InputField[] = []
+  for (const node of nodes) {
+    if (node.type !== 'variable') continue
+    const { scope, name, value } = node.config as Record<string, unknown>
+    if (scope !== 'input') continue
+    const varName = String(name ?? '')
+    if (!varName) continue
+    fields.push({
+      name: varName,
+      defaultValue: String(value ?? ''),
+      label: node.label || varName,
+    })
+  }
+  return fields
+}
+
 /** 将 DB Row 转为 Workflow */
 function toWorkflow(row: typeof workflows.$inferSelect): Workflow {
+  const nodes = JSON.parse(row.nodesJson) as WorkflowNode[]
   return {
     id: row.id,
     name: row.name,
     deviceId: row.deviceId ?? undefined,
-    nodes: JSON.parse(row.nodesJson) as WorkflowNode[],
+    nodes,
     edges: JSON.parse(row.edgesJson) as WorkflowEdge[],
+    inputFields: extractInputFields(nodes),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -332,7 +353,7 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
   app.post<{ Body: SaveRunConfigRequest }>(
     '/api/workflows/run-config',
     async (request, reply) => {
-      const { deviceId, workflowId, triggerMode, scheduleTimes, maxSuccessCount, maxFailCount } = request.body
+      const { deviceId, workflowId, triggerMode, scheduleTimes, maxSuccessCount, maxFailCount, inputValues } = request.body
       if (!deviceId || !workflowId) {
         return reply.status(400).send({ success: false, code: 'INVALID_PARAMS', message: 'deviceId 和 workflowId 为必填' })
       }
@@ -344,6 +365,7 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
         scheduleTimes: scheduleTimes ?? [],
         maxSuccessCount: maxSuccessCount ?? 0,
         maxFailCount: maxFailCount ?? 0,
+        inputValues: inputValues ?? {},
       }
 
       const now = Date.now()

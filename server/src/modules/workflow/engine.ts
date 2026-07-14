@@ -351,17 +351,13 @@ export class WorkflowEngine {
     const varName = String(name ?? '')
     if (!varName) return
 
-    // session 变量保持上次值，local 变量每次重置
-    if (scope !== 'session' && !(varName in ctx.variables)) {
-      ctx.variables[varName] = value !== undefined ? Number(value) || 0 : 0
-    }
-
+    // 变量初始化由 initVariables() 统一处理，这里只执行操作
     const current = Number(ctx.variables[varName]) || 0
     let result: number
 
     switch (action) {
-      case 'init':
-        // 仅在变量不存在时初始化（session 跨轮持久化场景）
+      case 'createOrSet':
+        // 变量不存在时初始化，已存在则保留当前值
         if (varName in ctx.variables) {
           result = current
         } else {
@@ -385,9 +381,6 @@ export class WorkflowEngine {
         result = d === 0 ? 0 : current / d
         break
       }
-      case 'reset':
-        result = 0
-        break
       default:
         result = current
     }

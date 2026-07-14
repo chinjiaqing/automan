@@ -463,6 +463,8 @@ export interface NodeTypeDefinition {
   category: 'flow' | 'action' | 'data' | 'app' | 'debug'
   label: string
   icon: string
+  /** 节点描述（仅展示） */
+  description?: string
   configSchema: FieldSchema[]
   outputs: OutputPort[]
   inputs: InputPort[]
@@ -486,6 +488,16 @@ export interface WorkflowEdge {
   sourceHandle?: string
 }
 
+/** 外部输入字段（从 variable 节点 scope=input 自动提取） */
+export interface InputField {
+  /** 变量名（对应 variable.config.name） */
+  name: string
+  /** 默认值（对应 variable.config.value） */
+  defaultValue: string
+  /** 显示标签（对应 variable.label） */
+  label: string
+}
+
 /** 工作流 */
 export interface Workflow {
   id: string
@@ -493,6 +505,8 @@ export interface Workflow {
   deviceId?: string
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
+  /** 自动提取的外部输入字段列表 */
+  inputFields?: InputField[]
   createdAt: number
   updatedAt: number
 }
@@ -536,6 +550,8 @@ export interface WorkflowRunConfig {
   maxSuccessCount: number
   /** 失败次数上限，0=不限制 */
   maxFailCount: number
+  /** 外部输入变量值 { [varName]: value } */
+  inputValues?: Record<string, string>
 }
 
 /** 保存运行配置请求 */
@@ -546,6 +562,8 @@ export interface SaveRunConfigRequest {
   scheduleTimes?: ScheduleTime[]
   maxSuccessCount?: number
   maxFailCount?: number
+  /** 外部输入变量值 { [varName]: value } */
+  inputValues?: Record<string, string>
 }
 
 /** 工作流执行状态 */

@@ -1,12 +1,19 @@
 <template>
   <aside class="config-panel" v-if="nodeDef">
     <div class="config-panel__header">
-      <i :class="`pi ${nodeDef.icon} text-sm text-brand-600`" />
-      <span class="text-sm font-semibold text-gray-700">{{ nodeDef.label }}</span>
-      <span class="text-xs text-gray-400 ml-auto">{{ nodeId }}</span>
+      <div class="flex items-center gap-2">
+        <i :class="`pi ${nodeDef.icon} text-sm text-brand-600`" />
+        <span class="text-sm font-semibold text-gray-700">{{ nodeDef.label }}</span>
+      </div>
+      <span class="text-xs text-gray-400">{{ nodeId }}</span>
     </div>
 
     <div class="config-panel__body">
+      <!-- 节点描述 -->
+      <div v-if="nodeDef.description" class="config-panel__desc">
+        {{ nodeDef.description }}
+      </div>
+
       <!-- 节点名称 -->
       <div class="config-panel__field">
         <label class="config-panel__label">节点名称</label>
@@ -49,9 +56,11 @@
             v-else-if="field.type === 'select'"
             class="w-full"
             size="small"
-            :options="field.options"
-            :value="getConfig(field.key)"
-            @update:modelValue="setConfig(field.key, $event)"
+            :options="getSelectOptions(field)"
+            option-label="label"
+            option-value="value"
+            :model-value="getConfig(field.key)"
+            @update:modelValue="onSelectChange(field.key, $event)"
           />
 
           <!-- slider -->
@@ -82,7 +91,7 @@
             v-else-if="field.type === 'data-source'"
             :value="getConfig(field.key) as string"
             :data-nodes="dataNodes"
-            @update:modelValue="setConfig(field.key, $event)"
+            @update:modelValue="onDataSourceSelect(field.key, $event)"
           />
 
           <!-- coord-input (纯坐标，无引用) -->
@@ -184,7 +193,7 @@ const props = defineProps<{
   nodeLabel: string
   config: Record<string, unknown>
   upstreamNodes: Array<{ id: string; label: string; type: string }>
-  dataNodes: Array<{ name: string; label: string; nodeId: string }>
+  dataNodes: Array<{ name: string; label: string; nodeId: string; scope?: string }>
 }>()
 
 const emit = defineEmits<{
@@ -196,6 +205,26 @@ const nodeDef = computed(() => getNodeTypeDef(props.nodeType))
 
 const fileRefs = ref<Record<string, HTMLInputElement | null>>({})
 
+/** 下拉选项中文映射 */
+const optionLabels: Record<string, Record<string, string>> = {
+  scope: { session: '全局', local: '本轮', input: '外部输入' },
+  action: { createOrSet: '创建或赋值', set: '赋值', add: '增加', sub: '减去', mul: '乘', div: '除' },
+}
+
+/** 将 string[] 选项转为 {label, value}[] 格式，有中文映射时使用中文 */
+function getSelectOptions(field: FieldSchema): Array<{ label: string; value: string }> {
+  const labels = optionLabels[field.key]
+  return (field.options ?? []).map((opt: string) => ({
+    label: labels?.[opt] ?? opt,
+    value: opt,
+  }))
+}
+
+/** Select 变化时触发配置更新，并处理联动逻辑 */
+function onSelectChange(key: string, value: string) {
+  setConfig(key, value)
+}
+
 function setFileRef(key: string, el: HTMLInputElement | null) {
   fileRefs.value[key] = el
 }
@@ -206,6 +235,16 @@ function getConfig(key: string): unknown {
 
 function setConfig(key: string, value: unknown) {
   emit('update:config', key, value)
+}
+
+/** 选择已有数据源时，自动填充该数据源首次定义时的 scope */
+function onDataSourceSelect(key: string, name: string) {
+  emit('update:config', key, name)
+  // 查找第一个定义该变量名的节点（排除当前节点），取其 scope
+  const source = props.dataNodes.find((n) => n.name === name && n.nodeId !== props.nodeId)
+  if (source) {
+    emit('update:config', 'scope', source.scope ?? 'local')
+  }
 }
 
 function shouldShow(field: FieldSchema): boolean {
@@ -267,8 +306,8 @@ function onFileChange(event: Event, key: string) {
 
 .config-panel__header {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 12px 16px;
   border-bottom: 1px solid #f3f4f6;
 }
@@ -277,6 +316,15 @@ function onFileChange(event: Event, key: string) {
   padding: 12px 16px;
   overflow-y: auto;
   flex: 1;
+}
+
+.config-panel__desc {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f3f4f6;
 }
 
 .config-panel__field {

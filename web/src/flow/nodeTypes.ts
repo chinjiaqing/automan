@@ -12,6 +12,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '开始',
     icon: 'pi-play',
+    description: '工作流的起始节点，每次执行从这里开始',
     configSchema: [],
     outputs: [],
     inputs: [],
@@ -22,6 +23,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '结束',
     icon: 'pi-stop',
+    description: '工作流结束，不计入成功或失败',
     configSchema: [],
     outputs: [],
     inputs: [],
@@ -32,6 +34,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '结束（成功）',
     icon: 'pi-check-circle',
+    description: '标记工作流成功结束，计入成功计数',
     configSchema: [],
     outputs: [],
     inputs: [],
@@ -42,6 +45,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '结束（失败）',
     icon: 'pi-times-circle',
+    description: '标记工作流失败结束，计入失败计数',
     configSchema: [],
     outputs: [],
     inputs: [],
@@ -52,6 +56,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '条件判断',
     icon: 'pi-question',
+    description: '根据条件分支执行，true 走下方出口，false 走右侧出口',
     configSchema: [
       { key: 'left', label: '左值', type: 'data-ref', placeholder: '引用上游输出' },
       {
@@ -71,6 +76,7 @@ export const flowNodeTypes: NodeTypeDefinition[] = [
     category: 'flow',
     label: '循环',
     icon: 'pi-refresh',
+    description: '条件满足时重复执行 body 链，不满足时走 exit 出口',
     configSchema: [
       { key: 'left', label: '条件左值', type: 'data-ref', placeholder: '引用上游输出' },
       {
@@ -95,6 +101,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '识图',
     icon: 'pi-image',
+    description: '在截图中查找模板图片，返回匹配位置和数量',
     configSchema: [
       { key: 'templateImage', label: '模板图片', type: 'image-upload' },
       { key: 'threshold', label: '相似度', type: 'slider', min: 30, max: 100, default: 80 },
@@ -113,6 +120,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '识字',
     icon: 'pi-file-edit',
+    description: '对指定区域进行 OCR 文字识别',
     configSchema: [
       { key: 'region', label: '识别区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
@@ -128,6 +136,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '找字',
     icon: 'pi-search',
+    description: '在截图中查找指定文字，返回匹配位置',
     configSchema: [
       { key: 'target', label: '目标文字', type: 'text' },
       { key: 'similarity', label: '相似度', type: 'slider', min: 30, max: 100, default: 80 },
@@ -146,6 +155,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '点击',
     icon: 'pi-bullseye',
+    description: '在指定坐标执行一次点击操作',
     configSchema: [
       { key: 'x', label: 'X 坐标', type: 'data-input', default: '0' },
       { key: 'y', label: 'Y 坐标', type: 'data-input', default: '0' },
@@ -162,6 +172,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '范围点击',
     icon: 'pi-objects-column',
+    description: '在指定区域内随机选取一点进行点击',
     configSchema: [
       { key: 'region', label: '点击区域', type: 'coord-ref', default: '0,0,0,0' },
     ],
@@ -174,6 +185,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '滑动',
     icon: 'pi-angle-double-right',
+    description: '从起点区域滑动到终点区域',
     configSchema: [
       { key: 'startRegion', label: '起点区域', type: 'coord-ref', default: '0,0,0,0' },
       { key: 'endRegion', label: '终点区域', type: 'coord-ref', default: '0,0,0,0' },
@@ -194,6 +206,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '等待',
     icon: 'pi-clock',
+    description: '暂停指定毫秒数后继续执行',
     configSchema: [
       { key: 'ms', label: '延迟毫秒', type: 'number', default: 1000 },
     ],
@@ -206,6 +219,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     category: 'action',
     label: '随机等待',
     icon: 'pi-clock',
+    description: '在最小值和最大值之间随机等待一段时间',
     configSchema: [
       { key: 'left', label: '最小值(ms)', type: 'data-input', default: '0', placeholder: '最小延迟，支持引用' },
       { key: 'right', label: '最大值(ms)', type: 'data-input', default: '1000', placeholder: '最大延迟，支持引用' },
@@ -224,20 +238,21 @@ export const dataNodeTypes: NodeTypeDefinition[] = [
     category: 'data',
     label: '数据',
     icon: 'pi-database',
+    description: '管理变量：创建、赋值、四则运算，支持全局/本轮/外部输入作用域',
     configSchema: [
       { key: 'name', label: '数据源', type: 'data-source' },
       {
         key: 'scope',
         label: '作用域',
         type: 'select',
-        options: ['local', 'session', 'input'],
+        options: ['session', 'local', 'input'],
         default: 'local',
       },
       {
         key: 'action',
         label: '操作',
         type: 'select',
-        options: ['init', 'set', 'add', 'sub', 'mul', 'div', 'reset'],
+        options: ['createOrSet', 'set', 'add', 'sub', 'mul', 'div'],
         default: 'set',
       },
       {
@@ -254,7 +269,7 @@ export const dataNodeTypes: NodeTypeDefinition[] = [
         type: 'data-input',
         placeholder: '常量或引用 {{nodeId.key}}',
         default: 0,
-        showWhen: { action: 'set,init' },
+        showWhen: { action: 'set,createOrSet' },
       },
     ],
     outputs: [{ key: 'value', label: '当前值', dataType: 'number' }],
@@ -266,6 +281,7 @@ export const dataNodeTypes: NodeTypeDefinition[] = [
     category: 'data',
     label: '骰子?',
     icon: 'pi-sparkles',
+    description: '生成一个 1~6 的随机整数',
     configSchema: [],
     outputs: [{ key: 'value', label: '随机1-6的正整数', dataType: 'number' }],
     inputs: [],
@@ -280,6 +296,7 @@ export const appNodeTypes: NodeTypeDefinition[] = [
     category: 'app',
     label: '启动应用',
     icon: 'pi-play-circle',
+    description: '通过包名启动指定应用',
     configSchema: [
       { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
     ],
@@ -292,6 +309,7 @@ export const appNodeTypes: NodeTypeDefinition[] = [
     category: 'app',
     label: '关闭应用',
     icon: 'pi-times-circle',
+    description: '强制关闭指定包名的应用',
     configSchema: [
       { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
     ],
@@ -304,6 +322,7 @@ export const appNodeTypes: NodeTypeDefinition[] = [
     category: 'app',
     label: '重启应用',
     icon: 'pi-refresh',
+    description: '先关闭再启动指定应用',
     configSchema: [
       { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
     ],
@@ -316,6 +335,7 @@ export const appNodeTypes: NodeTypeDefinition[] = [
     category: 'app',
     label: '应用状态',
     icon: 'pi-info-circle',
+    description: '检测应用是否正在运行，true 走下方出口，false 走右侧',
     configSchema: [
       { key: 'packageName', label: '包名', type: 'text', placeholder: 'com.example.app' },
     ],
@@ -332,6 +352,7 @@ export const debugNodeTypes: NodeTypeDefinition[] = [
     category: 'debug',
     label: '日志',
     icon: 'pi-info-circle',
+    description: '输出一条日志信息，支持引用上游节点输出',
     configSchema: [
       {
         key: 'message',

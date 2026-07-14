@@ -7,8 +7,9 @@
       </div>
       <span class="flow-node__label">{{ label }}</span>
     </div>
-    <!-- 显示数据源名称 -->
-    <div v-if="varName" class="flow-node__var-name">
+    <!-- 显示作用域 + 变量名 -->
+    <div v-if="varName" class="flow-node__var-name flex items-center gap-1">
+      <span class="text-xs text-gray-500 bg-gray-100 px-1 rounded">{{ scopeLabel }}</span>
       <span class="text-xs font-mono text-blue-600 bg-blue-50 px-1 rounded">{{ varName }}</span>
     </div>
     <!-- 显示操作 -->
@@ -39,22 +40,33 @@ const varName = computed(() => {
   return typeof name === 'string' ? name : ''
 })
 
+const scopeLabel = computed(() => {
+  const scope = props.data.config?.scope as string
+  const map: Record<string, string> = { session: '全局', local: '本轮', input: '外部输入' }
+  return map[scope] ?? scope ?? '本轮'
+})
+
 const actionLabel = computed(() => {
   const action = props.data.config?.action as string
   if (!action) return ''
   const map: Record<string, string> = {
-    set: 'set = ',
+    createOrSet: '创建或赋值',
+    set: '赋值 = ',
     add: '+= ',
     sub: '-= ',
     mul: '×= ',
     div: '÷= ',
-    reset: 'reset → 0',
   }
   const prefix = map[action] ?? action
-  if (action === 'reset') return prefix
-  const val = action === 'set'
-    ? props.data.config?.value ?? '?'
-    : props.data.config?.operand ?? '?'
+  if (action === 'createOrSet') {
+    const val = props.data.config?.value ?? '?'
+    return `${prefix} ${val}`
+  }
+  if (action === 'set') {
+    const val = props.data.config?.value ?? '?'
+    return `${prefix}${val}`
+  }
+  const val = props.data.config?.operand ?? '?'
   return `${prefix}${val}`
 })
 </script>

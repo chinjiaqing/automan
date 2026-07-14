@@ -105,6 +105,23 @@
             <div v-if="configForm.maxFailCount === 0" class="text-xs text-gray-400">当前不限制，达到指定次数后自动停止</div>
           </div>
 
+          <!-- 外部输入变量 -->
+          <div v-if="expandedInputFields.length > 0" class="space-y-2">
+            <label class="text-gray-500 font-medium">外部输入</label>
+            <div v-for="field in expandedInputFields" :key="field.name" class="space-y-0.5">
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600">{{ field.label }}</span>
+                <span class="text-gray-400">({{ field.name }})</span>
+              </div>
+              <InputText
+                v-model="configForm.inputValues[field.name]"
+                :placeholder="field.defaultValue ? `默认: ${field.defaultValue}` : '未设置'"
+                class="w-full"
+                size="small"
+              />
+            </div>
+          </div>
+
           <!-- 运行计数显示 -->
           <div v-if="getFlowState(wf.id)" class="flex gap-3 text-gray-400">
             <span>成功: {{ getCounts(wf.id).success }}</span>
@@ -122,10 +139,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, reactive } from 'vue'
+import { ref, watch, onMounted, reactive, computed } from 'vue'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
 import InputNumber from 'primevue/inputnumber'
+import InputText from 'primevue/inputtext'
 import DatePicker from 'primevue/datepicker'
 import { useToast } from 'primevue/usetoast'
 import type { Workflow, WorkflowRunConfig, FlowState } from '@automan/shared/types.js'
@@ -151,17 +169,27 @@ const configForm = reactive<{
   scheduleDates: Date[]
   maxSuccessCount: number
   maxFailCount: number
+  /** 外部输入变量值 */
+  inputValues: Record<string, string>
 }>({
   triggerMode: 'immediate',
   scheduleDates: [],
   maxSuccessCount: 0,
   maxFailCount: 0,
+  inputValues: {},
 })
 
 const triggerOptions = [
   { label: '每次截图', value: 'immediate' },
   { label: '定时触发', value: 'scheduled' },
 ]
+
+/** 当前展开工作流的外部输入字段 */
+const expandedInputFields = computed(() => {
+  if (!expandedId.value) return []
+  const wf = workflows.value.find((w) => w.id === expandedId.value)
+  return wf?.inputFields ?? []
+})
 
 function getFlowState(workflowId: string): FlowState | undefined {
   return workflowFlowStateMap.value.get(workflowId)?.flowState as FlowState | undefined
@@ -231,18 +259,21 @@ async function loadRunConfig(workflowId: string) {
         : []
       configForm.maxSuccessCount = cfg.maxSuccessCount
       configForm.maxFailCount = cfg.maxFailCount
+      configForm.inputValues = { ...(cfg.inputValues ?? {}) }
     } else {
       // 无配置，重置默认
       configForm.triggerMode = 'immediate'
       configForm.scheduleDates = []
       configForm.maxSuccessCount = 0
       configForm.maxFailCount = 0
+      configForm.inputValues = {}
     }
   } catch {
     configForm.triggerMode = 'immediate'
     configForm.scheduleDates = []
     configForm.maxSuccessCount = 0
     configForm.maxFailCount = 0
+    configForm.inputValues = {}
   }
 }
 
@@ -256,6 +287,7 @@ async function saveConfig(workflowId: string) {
       scheduleTimes: configForm.scheduleDates.map((d) => ({ hour: d.getHours(), minute: d.getMinutes() })),
       maxSuccessCount: configForm.maxSuccessCount,
       maxFailCount: configForm.maxFailCount,
+      inputValues: configForm.inputValues,
     })
     toast.add({ severity: 'success', summary: '保存成功', detail: '工作流运行配置已更新', life: 3000 })
   } catch (err) {

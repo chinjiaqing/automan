@@ -245,12 +245,21 @@ const upstreamNodes = computed(() => {
 
 /** 工作流中所有数据节点（供 data-source 下拉引用） */
 const dataNodes = computed(() => {
+  const seen = new Set<string>()
   return nodes.value
-    .filter((n) => n.type === 'variable' && n.data?.config?.name)
+    .filter((n) => {
+      if (n.type !== 'variable' || !n.data?.config?.name) return false
+      const name = n.data.config.name as string
+      // 按 name 去重，只保留第一个定义
+      if (seen.has(name)) return false
+      seen.add(name)
+      return true
+    })
     .map((n) => ({
       name: n.data.config.name as string,
       label: n.data.label ?? n.type,
       nodeId: n.id,
+      scope: (n.data.config.scope as string) ?? 'local',
     }))
 })
 
