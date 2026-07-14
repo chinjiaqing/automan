@@ -250,7 +250,7 @@ const deviceMenuItems = computed(() => {
   const isActive = menuTarget.value ? isDeviceActive(menuTarget.value.id) : false
   return [
     {
-      label: '重命名',
+      label: '编辑',
       icon: 'pi pi-pencil',
       command: () => { if (menuTarget.value) openEdit(menuTarget.value) },
     },

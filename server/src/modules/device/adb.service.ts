@@ -250,12 +250,8 @@ export class AdbService {
       let transportType: 'usb' | 'wifi' | 'emulator'
 
       if (rawSerial.startsWith('emulator-')) {
-        // 模拟器：emulator-5554 的 ADB 端口 = 5554 + 1 = 5555
+        // 模拟器：保留原始 serial（如 emulator-5554），即插即用无需 adb connect
         transportType = 'emulator'
-        const consolePort = parseInt(rawSerial.replace('emulator-', ''), 10)
-        if (!isNaN(consolePort)) {
-          serial = `127.0.0.1:${consolePort + 1}`
-        }
       } else if (rawSerial.startsWith('127.0.0.1:')) {
         // 本地网络设备（如雷电模拟器 127.0.0.1:5555）
         transportType = 'emulator'
