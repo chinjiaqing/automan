@@ -427,8 +427,9 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       try {
         const adbPath = ADB_PATH
         await adbService.connect(adbPath, device.adbAddress)
-        // 获取分辨率做坐标转换
-        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        // 通过 screencap 获取实际像素分辨率（wm size 方向可能与截图不一致）
+        const size = await adbService.getScreencapSize(adbPath, device.adbAddress)
+          ?? await adbService.getScreenSize(adbPath, device.adbAddress)
         const sf = size ? computeScaleFactor(size.width, size.height) : null
         const [actualX, actualY] = sf ? toActualPoint(point[0], point[1], sf) : point
         const result = await adbClick(adbPath, device.adbAddress, [actualX, actualY])
@@ -468,7 +469,8 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       try {
         const adbPath = ADB_PATH
         await adbService.connect(adbPath, device.adbAddress)
-        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        const size = await adbService.getScreencapSize(adbPath, device.adbAddress)
+          ?? await adbService.getScreenSize(adbPath, device.adbAddress)
         const sf = size ? computeScaleFactor(size.width, size.height) : null
         const actualRegion = sf ? toActualRegion(region, sf) : region
         const result = await adbAreaClick(adbPath, device.adbAddress, actualRegion)
@@ -507,7 +509,8 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       try {
         const adbPath = ADB_PATH
         await adbService.connect(adbPath, device.adbAddress)
-        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        const size = await adbService.getScreencapSize(adbPath, device.adbAddress)
+          ?? await adbService.getScreenSize(adbPath, device.adbAddress)
         const sf = size ? computeScaleFactor(size.width, size.height) : null
         const actualStart = sf ? toActualRegion(startRegion, sf) : startRegion
         const actualEnd = sf ? toActualRegion(endRegion, sf) : endRegion

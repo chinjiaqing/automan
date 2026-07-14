@@ -86,15 +86,26 @@ export class DeviceSession {
     }
     this.sendLog('info', `ADB 已连接 ✓`)
 
-    // Step 2: 获取分辨率 + 计算缩放比
-    const size = await this.adbService.getScreenSize(this.adbPath, this.adbTarget)
+    // Step 2: 通过 screencap 获取实际像素分辨率
+    // wm size 始终返回设备自然方向（竖屏）的分辨率，
+    // 当游戏横屏运行时与 screencap 实际方向不一致，导致坐标转换错误。
+    // 改用 screencap 直接读取实际像素方向，确保宽高一致。
+    const size = await this.adbService.getScreencapSize(this.adbPath, this.adbTarget)
     if (!size) {
-      this.sendLog('warn', `无法获取分辨率，使用默认缩放（标准分辨率）`)
-      this._scaleFactor = computeScaleFactor(config.resolution.width, config.resolution.height)
+      this.sendLog('warn', `无法获取 screencap 分辨率，回退到 wm size`)
+      const wmSize = await this.adbService.getScreenSize(this.adbPath, this.adbTarget)
+      if (!wmSize) {
+        this.sendLog('warn', `无法获取分辨率，使用默认缩放（标准分辨率）`)
+        this._scaleFactor = computeScaleFactor(config.resolution.width, config.resolution.height)
+        return
+      }
+      this._scaleFactor = computeScaleFactor(wmSize.width, wmSize.height)
+      this.sendLog('info', `设备分辨率 (wm size): ${wmSize.width}x${wmSize.height}`)
+      this.sendLog('info', `标准空间: ${this._scaleFactor.standardWidth}x${this._scaleFactor.standardHeight}`)
       return
     }
 
-    this.sendLog('info', `设备分辨率: ${size.width}x${size.height}`)
+    this.sendLog('info', `设备分辨率 (screencap): ${size.width}x${size.height}`)
     this._scaleFactor = computeScaleFactor(size.width, size.height)
     this.sendLog('info', `标准空间: ${this._scaleFactor.standardWidth}x${this._scaleFactor.standardHeight}`)
   }

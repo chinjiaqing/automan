@@ -88,6 +88,8 @@ export class AdbService {
   /**
    * 获取设备当前分辨率
    * 返回 { width, height } 或 null（无法获取时）
+   * 注意：wm size 始终返回设备自然方向（竖屏）的分辨率，
+   * 当设备横屏时与 screencap 实际方向不一致，优先使用 getScreencapSize。
    */
   async getScreenSize(adbPath: string, target: string): Promise<{ width: number; height: number } | null> {
     try {
@@ -101,6 +103,28 @@ export class AdbService {
       return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) }
     } catch (err) {
       logger.error('AdbService', `getScreenSize failed: ${String(err)}`)
+      return null
+    }
+  }
+
+  /**
+   * 通过 screencap 获取设备当前实际像素分辨率
+   * 直接读取 PNG 头部（bytes 16-23），无需完整解码，速度快。
+   * 返回的是当前屏幕方向的实际宽高，与 screencap 输出方向一致。
+   */
+  async getScreencapSize(adbPath: string, target: string): Promise<{ width: number; height: number } | null> {
+    try {
+      const buf = await this.screencap(adbPath, target)
+      if (buf.length < 24 || buf[0] !== 0x89 || buf[1] !== 0x50) {
+        logger.warn('AdbService', 'getScreencapSize: screencap 返回数据不是有效 PNG')
+        return null
+      }
+      const width = buf.readUInt32BE(16)
+      const height = buf.readUInt32BE(20)
+      logger.info('AdbService', `getScreencapSize: ${width}x${height} on ${target}`)
+      return { width, height }
+    } catch (err) {
+      logger.error('AdbService', `getScreencapSize failed: ${String(err)}`)
       return null
     }
   }

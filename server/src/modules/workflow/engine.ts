@@ -211,12 +211,12 @@ export class WorkflowEngine {
             break
 
           case 'click':
-            await this.execClick(node, ctx)
+            await this.execClick(node, ctx, emit)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
           case 'areaClick':
-            await this.execAreaClick(node, ctx)
+            await this.execAreaClick(node, ctx, emit)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
@@ -449,11 +449,11 @@ export class WorkflowEngine {
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'click':
-            await this.execClick(innerNode, ctx)
+            await this.execClick(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'areaClick':
-            await this.execAreaClick(innerNode, ctx)
+            await this.execAreaClick(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'swipe':
@@ -646,11 +646,12 @@ export class WorkflowEngine {
   }
 
   /** 点击节点 */
-  private async execClick(node: WorkflowNode, ctx: EngineContext): Promise<void> {
+  private async execClick(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
     const rawX = Number(resolveValue(node.config.x, ctx.outputs) ?? 0)
     const rawY = Number(resolveValue(node.config.y, ctx.outputs) ?? 0)
     const [x, y] = clampPoint(rawX, rawY, ctx.screenshotWidth, ctx.screenshotHeight)
     const [actualX, actualY] = toActualPoint(x, y, ctx.scaleFactor)
+    emit('info', `点击: 标准(${x},${y}) → 实际(${actualX},${actualY})`)
     await adbClick(ctx.adbPath, ctx.adbTarget, [actualX, actualY])
     ctx.annotations.push({
       type: 'click',
@@ -661,13 +662,11 @@ export class WorkflowEngine {
   }
 
   /** 范围点击节点 */
-  private async execAreaClick(node: WorkflowNode, ctx: EngineContext): Promise<void> {
-    const region = clampRegion(
-      resolveRegion(node.config.region, ctx.outputs),
-      ctx.screenshotWidth,
-      ctx.screenshotHeight,
-    )
+  private async execAreaClick(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
+    const rawRegion = resolveRegion(node.config.region, ctx.outputs)
+    const region = clampRegion(rawRegion, ctx.screenshotWidth, ctx.screenshotHeight)
     const actualRegion = toActualRegion(region, ctx.scaleFactor)
+    emit('info', `范围点击: 标准[${rawRegion}] → clamp[${region}] → 实际[${actualRegion}] (截图${ctx.screenshotWidth}x${ctx.screenshotHeight})`)
     await adbAreaClick(ctx.adbPath, ctx.adbTarget, actualRegion)
     const cx = Math.round((region[0] + region[2]) / 2)
     const cy = Math.round((region[1] + region[3]) / 2)
