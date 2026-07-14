@@ -150,6 +150,8 @@ export type ApiResult<T = unknown> = ApiResponse<T> | ApiError
 export interface CreateDeviceRequest {
   name: string
   adbAddress: string
+  /** 截图间隔（秒），默认 2，范围 2-30 */
+  screenshotInterval?: number
 }
 
 /** 删除设备请求 */
@@ -173,6 +175,8 @@ export interface DeviceInfo {
   name: string
   adbAddress: string
   status: DeviceStatus
+  /** 截图间隔（秒），默认 2，范围 2-30 */
+  screenshotInterval: number
   createdAt: number
   updatedAt: number
 }

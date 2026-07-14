@@ -47,12 +47,37 @@ export class WorkflowService {
     )
     if (deviceActors.length === 0) return
 
-    const needScreenshot = deviceActors.some((a) => a.getInfo().flowState !== 'completed')
+    // cancelled 的 actor（设备级错误/达标自动停止）不再需要截图
+    const needScreenshot = deviceActors.some((a) => {
+      const info = a.getInfo()
+      return info.flowState !== 'completed' && !info.cancelled
+    })
 
     if (needScreenshot) {
       this.dispatcher.resume(deviceId)
     } else {
       this.dispatcher.pause(deviceId)
+    }
+
+    // 所有 actor 都不再需要截图时，自动清理已完成/已取消的 actor
+    if (!needScreenshot) {
+      for (const actor of deviceActors) {
+        const info = actor.getInfo()
+        if (info.cancelled || info.flowState === 'completed') {
+          this.cronManager.unregister(info.deviceId, info.workflowId)
+          actor.stop() // fire-and-forget：已取消的 actor 无需等待
+          this.actors.delete(info.runId)
+          logger.info('WorkflowService', `auto-cleaned actor ${info.runId} (cancelled=${info.cancelled}, flowState=${info.flowState})`)
+        }
+      }
+      // 与 stopWorkflow 保持一致：stop 调度器 + 销毁设备会话
+      this.dispatcher.stop(deviceId)
+      const session = this.deviceSessions.get(deviceId)
+      if (session) {
+        session.destroy()
+        this.deviceSessions.delete(deviceId)
+      }
+      this.emitDeviceRunStatus(deviceId)
     }
   }
 
@@ -117,10 +142,8 @@ export class WorkflowService {
       adbPath,
       adbTarget: devRow.adbAddress,
     })
-    // 注意：不在此处 await ensureReady()
-    // 设备就绪检测由 WorkflowActor 在后台等待，避免阻塞 HTTP 请求
-    // 但立即触发检测流程（幂等），让它在后台开始执行
-    session.ensureReady().catch(() => { /* actor 侧会处理错误 */ })
+    // ★ 设备预检测：连接 ADB + 探测分辨率，失败则拒绝启动
+    await session.ensureReady()
 
     // 加载运行配置
     const runConfig = this.loadRunConfig(deviceId, workflowId)
@@ -150,7 +173,9 @@ export class WorkflowService {
       adbPath,
       adbTarget: devRow.adbAddress,
     }
-    this.dispatcher.start(deviceInfo, screenshotInterval ?? 2000)
+    // 优先用设备配置的截图间隔（秒转毫秒），否则用请求参数，最后默认 2000ms
+    const intervalMs = devRow.screenshotInterval * 1000 || screenshotInterval || 2000
+    this.dispatcher.start(deviceInfo, intervalMs)
 
     logger.info('WorkflowService', `started: ${workflow.name} on device ${devRow.name} (runId: ${runId})`)
     this.emitDeviceRunStatus(deviceId)
@@ -167,8 +192,7 @@ export class WorkflowService {
 
   /**
    * 批量启动工作流（设备级）
-   * 创建设备会话 + fire-and-forget ensureReady，Actor 在 onScreenshot 中等待设备就绪
-   * HTTP 请求立即返回，不阻塞
+   * 创建设备会话 + await ensureReady 预检测，设备连接失败则拒绝启动
    */
   async batchStartWorkflows(
     deviceId: string,
@@ -190,10 +214,8 @@ export class WorkflowService {
       adbTarget: devRow.adbAddress,
     })
 
-    // 注意：不在此处 await ensureReady()！
-    // 设备就绪检测由 WorkflowActor 在 onScreenshot 中后台等待
-    // 避免阻塞 HTTP 请求（模拟器冷启动可能需 70s+）
-    session.ensureReady().catch(() => { /* actor 侧会处理错误 */ })
+    // ★ 设备预检测：连接 ADB + 探测分辨率，失败则拒绝启动
+    await session.ensureReady()
 
     const deviceInfo: DeviceScreenshotInfo = {
       id: devRow.id,
@@ -201,7 +223,8 @@ export class WorkflowService {
       adbTarget: devRow.adbAddress,
     }
     // 启动截图调度器（幂等，subscribers++）
-    this.dispatcher.start(deviceInfo, screenshotInterval ?? 2000)
+    const intervalMs = devRow.screenshotInterval * 1000 || screenshotInterval || 2000
+    this.dispatcher.start(deviceInfo, intervalMs)
 
     const items: BatchRunItem[] = []
 

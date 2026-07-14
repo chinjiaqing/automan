@@ -31,6 +31,18 @@
         </p>
       </div>
 
+      <!-- 运行效率 -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">运行效率</label>
+        <div class="flex items-center gap-4">
+          <span class="text-xs text-gray-400 w-6 text-right">2</span>
+          <Slider v-model="form.screenshotInterval" :min="2" :max="30" :step="1" class="flex-1" />
+          <span class="text-xs text-gray-400 w-6">30</span>
+          <span class="text-sm font-semibold text-brand-600 w-10 text-center">{{ form.screenshotInterval }}</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1.5">值越低效率越高，越容易卡顿</p>
+      </div>
+
       <!-- 操作按钮 -->
       <div class="flex gap-2">
         <Button
@@ -120,6 +132,7 @@ import { ref, computed, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
+import Slider from 'primevue/slider'
 import type { DeviceInfo, DiscoveredDevice, TestConnectionResponse } from '@automan/shared/types.js'
 import { deviceApi } from '../api/device.js'
 import { useDevices } from '../composables/useDevices.js'
@@ -143,6 +156,7 @@ const errorMsg = ref('')
 const form = ref({
   name: '',
   adbAddress: '',
+  screenshotInterval: 2,
 })
 
 // ── 扫描设备 ──
@@ -195,9 +209,10 @@ watch(
       form.value = {
         name: props.device.name,
         adbAddress: props.device.adbAddress,
+        screenshotInterval: props.device.screenshotInterval ?? 2,
       }
     } else if (val) {
-      form.value = { name: '', adbAddress: '' }
+      form.value = { name: '', adbAddress: '', screenshotInterval: 2 }
       discoveredDevices.value = []
       testResult.value = null
     }
@@ -220,7 +235,7 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (isEdit.value && props.device) {
-      const res = await renameDevice(props.device.id, form.value.name.trim())
+      const res = await renameDevice(props.device.id, form.value.name.trim(), form.value.screenshotInterval)
       if (!res.success) {
         errorMsg.value = 'message' in res ? res.message : '更新失败'
         return
@@ -229,6 +244,7 @@ async function handleSubmit() {
       const res = await createDevice({
         name: form.value.name.trim(),
         adbAddress: form.value.adbAddress.trim(),
+        screenshotInterval: form.value.screenshotInterval,
       })
       if (!res.success) {
         errorMsg.value = 'message' in res ? res.message : '创建失败'

@@ -87,6 +87,7 @@ export class WorkflowActor extends ActorBase {
       state: this.getState(),
       executionCount: this.executionCount,
       flowState: this.flowState,
+      cancelled: this.cancelled,
       successCount: this.successCount,
       failCount: this.failCount,
     }

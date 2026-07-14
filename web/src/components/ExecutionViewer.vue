@@ -3,7 +3,7 @@
     <!-- 左上角提示文案 -->
     <div class="absolute top-1.5 left-2 z-10 text-xs text-gray-400 leading-tight select-none">
       <div>
-        每2秒刷新，
+        每 {{ screenshotInterval }} 秒刷新，
         <a href="#" class="text-blue-400 hover:text-blue-600 pointer-events-auto" @click.prevent="manualRefresh">手动刷新</a>
       </div>
       <div>点击图片可实时操作模拟器</div>
@@ -167,6 +167,7 @@ const props = defineProps<{
   screenshot: ScreenshotInfo | null
   annotations: AnnotationInfo | null
   deviceId?: string
+  screenshotInterval?: number
 }>()
 
 const toast = useToast()

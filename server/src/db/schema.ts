@@ -11,6 +11,7 @@ export const devices = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     adbAddress: text('adb_address').notNull().default(''),  // ★ 统一 ADB 寻址
+    screenshotInterval: integer('screenshot_interval').notNull().default(2),  // 截图间隔秒数
     status: text('status', { enum: ['running', 'stopped'] }).notNull().default('stopped'),
     createdAt: integer('created_at', { mode: 'number' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'number' }).notNull(),

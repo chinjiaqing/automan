@@ -34,7 +34,7 @@ export const deviceApi = {
   remove: (data: DeleteDeviceRequest) => api.post<{ id: string }>('/api/devices/delete', data),
 
   /** 更新设备名称 */
-  update: (data: { id: string; name: string }) =>
+  update: (data: { id: string; name: string; screenshotInterval?: number }) =>
     api.post<DeviceInfo>('/api/devices/update', data),
 
   /** 扫描已连接设备 */

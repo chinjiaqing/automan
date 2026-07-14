@@ -34,8 +34,8 @@ export function useDevices() {
     return res
   }
 
-  async function renameDevice(id: string, name: string) {
-    const res = await deviceApi.update({ id, name })
+  async function renameDevice(id: string, name: string, screenshotInterval?: number) {
+    const res = await deviceApi.update({ id, name, screenshotInterval })
     if (res.success) {
       const idx = devices.value.findIndex((d) => d.id === id)
       if (idx !== -1) {

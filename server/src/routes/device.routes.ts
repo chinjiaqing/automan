@@ -36,6 +36,7 @@ function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
     id: row.id,
     name: row.name,
     adbAddress: row.adbAddress,
+    screenshotInterval: row.screenshotInterval,
     status: row.status as DeviceStatus,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -53,7 +54,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
 
   // ── 创建设备 ───────────────────────────────
   app.post<{ Body: CreateDeviceRequest }>('/api/devices/create', async (request, reply) => {
-    const { name, adbAddress } = request.body
+    const { name, adbAddress, screenshotInterval } = request.body
 
     // 基础校验
     if (!name || !adbAddress) {
@@ -63,6 +64,9 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
         message: 'name、adbAddress 均为必填',
       })
     }
+
+    // 截图间隔校验：整数 2-30，默认 2
+    const interval = Math.max(2, Math.min(30, Math.round(screenshotInterval ?? 2)))
 
     // 唯一性校验：不允许重复 adbAddress
     const existing = db
@@ -86,6 +90,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
         id,
         name,
         adbAddress,
+        screenshotInterval: interval,
         status: DeviceStatus.STOPPED,
         createdAt: now,
         updatedAt: now,
@@ -123,10 +128,10 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // ── 更新设备（重命名）────────────────────────
-  app.post<{ Body: { id: string; name: string } }>(
+  app.post<{ Body: { id: string; name: string; screenshotInterval?: number } }>(
     '/api/devices/update',
     async (request, reply) => {
-      const { id, name } = request.body
+      const { id, name, screenshotInterval } = request.body
       if (!id || !name) {
         return reply.status(400).send({
           success: false,
@@ -144,8 +149,13 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
         })
       }
 
+      const updateData: Record<string, unknown> = { name, updatedAt: Date.now() }
+      if (screenshotInterval !== undefined) {
+        updateData.screenshotInterval = Math.max(2, Math.min(30, Math.round(screenshotInterval)))
+      }
+
       db.update(devices)
-        .set({ name, updatedAt: Date.now() })
+        .set(updateData)
         .where(eq(devices.id, id))
         .run()
 

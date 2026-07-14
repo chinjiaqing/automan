@@ -18,7 +18,7 @@
           v-for="device in devices"
           :key="device.id"
           class="group flex items-center gap-2 px-3 h-10 rounded-md cursor-pointer transition-colors hover:bg-brand-50 mb-0.5"
-          :class="{ 'bg-brand-50 text-brand-700': selectedId === device.id }"
+          :class="{ 'bg-brand-100 text-brand-800 font-medium border-l-3 border-brand-500': selectedId === device.id }"
           @click="selectDevice(device.id)"
         >
           <i
@@ -27,13 +27,21 @@
           />
           <span class="flex-1 text-sm truncate">{{ device.name }}</span>
           <span class="text-xs text-gray-400 truncate max-w-20" :title="device.adbAddress">{{ device.adbAddress }}</span>
-          <div v-if="!isDeviceActive(device.id)" class="hidden group-hover:flex items-center gap-0.5">
-            <Button text rounded severity="secondary" size="small" icon="pi pi-pencil" title="重命名" @click.stop="openEdit(device)" />
-            <Button text rounded severity="danger" size="small" icon="pi pi-trash" title="删除" @click.stop="confirmDelete(device)" />
-          </div>
+          <Button
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            icon="pi pi-ellipsis-v"
+            class="opacity-0 group-hover:opacity-100 transition-opacity"
+            @click.stop="toggleDeviceMenu($event, device)"
+          />
         </div>
       </nav>
     </aside>
+
+    <!-- 设备操作菜单 -->
+    <Menu ref="deviceMenuRef" :model="deviceMenuItems" :popup="true" />
 
     <!-- 第二栏 + 第三栏（选中设备后显示） -->
     <template v-if="selectedDevice">
@@ -114,7 +122,7 @@
         </div>
 
         <!-- 实时看板：独立于日志区，受开关控制 -->
-        <ExecutionViewer v-if="showViewer" :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" @manual-refresh="handleManualRefresh" />
+        <ExecutionViewer v-if="showViewer" :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" :screenshot-interval="selectedDevice?.screenshotInterval ?? 2" @manual-refresh="handleManualRefresh" />
 
         <!-- 日志区 -->
         <LogPanel :logs="logs" />
@@ -149,6 +157,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
+import Menu from 'primevue/menu'
 import ToggleSwitch from 'primevue/toggleswitch'
 import type { DeviceInfo } from '@automan/shared/types.js'
 import { DeviceRunStatus } from '@automan/shared/types.js'
@@ -232,6 +241,33 @@ onMounted(async () => {
     selectedId.value = exists ? lastId! : devices.value[0].id
   }
 })
+
+// ── 设备操作菜单 ──
+const deviceMenuRef = ref()
+const menuTarget = ref<DeviceInfo | null>(null)
+
+const deviceMenuItems = computed(() => {
+  const isActive = menuTarget.value ? isDeviceActive(menuTarget.value.id) : false
+  return [
+    {
+      label: '重命名',
+      icon: 'pi pi-pencil',
+      command: () => { if (menuTarget.value) openEdit(menuTarget.value) },
+    },
+    {
+      label: '删除',
+      icon: 'pi pi-trash',
+      class: 'text-red-500',
+      disabled: isActive,
+      command: () => { if (menuTarget.value) confirmDelete(menuTarget.value) },
+    },
+  ]
+})
+
+function toggleDeviceMenu(event: Event, device: DeviceInfo) {
+  menuTarget.value = device
+  deviceMenuRef.value?.toggle(event)
+}
 
 // ── 新增/编辑弹窗 ──
 const dialogVisible = ref(false)

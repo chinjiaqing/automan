@@ -24,6 +24,9 @@ export function runMigrations(): void {
   // 索引必须在 migrateDevicesTable() 之后创建（旧表可能尚无 adb_address 列）
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS "devices_adb_address_idx" ON "devices" ("adb_address")`)
 
+  // 加 screenshot_interval 列（旧库兼容）
+  migrateScreenshotInterval()
+
   // workflows
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS "workflows" (
@@ -104,5 +107,18 @@ function migrateDevicesTable(): void {
   // 删除旧的 NOT NULL 列（否则新代码 INSERT 时不提供这些列会报 SQLITE_CONSTRAINT_NOTNULL）
   try { sqlite.exec(`ALTER TABLE "devices" DROP COLUMN "ldconsole_path"`) } catch { /* 列不存在或已删除 */ }
   try { sqlite.exec(`ALTER TABLE "devices" DROP COLUMN "instance_index"`) } catch { /* 列不存在或已删除 */ }
+}
+
+/**
+ * 加 screenshot_interval 列（旧库兼容，默认 2）
+ */
+function migrateScreenshotInterval(): void {
+  const columns = sqlite.pragma(`table_info('devices')`) as Array<{ name: string }>
+  if (columns.some((c) => c.name === 'screenshot_interval')) return
+  try {
+    sqlite.exec(`ALTER TABLE "devices" ADD COLUMN "screenshot_interval" integer NOT NULL DEFAULT 2`)
+  } catch {
+    // 列已存在，忽略
+  }
 }
 
