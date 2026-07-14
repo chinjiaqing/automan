@@ -19,7 +19,7 @@
           :key="device.id"
           class="group flex items-center gap-2 px-3 h-10 rounded-md cursor-pointer transition-colors hover:bg-brand-50 mb-0.5"
           :class="{ 'bg-brand-50 text-brand-700': selectedId === device.id }"
-          @click="selectedId = device.id"
+          @click="selectDevice(device.id)"
         >
           <i
             class="pi text-sm"
@@ -44,22 +44,80 @@
 
       <!-- 第三栏：操作按钮 + 看板 + 日志 -->
       <div class="flex-1 min-w-0 flex flex-col">
+        <!-- 固定顶部操作栏 -->
+        <div class="toolbar flex items-center gap-3 px-4 bg-white border-b border-gray-200 flex-shrink-0" style="height: 48px;">
+          <span class="text-sm text-gray-600 flex items-center">
+            <span class="font-semibold text-gray-700">【{{ selectedDevice.name }}】</span>
+            <i class="pi pi-check-circle text-green-500 ml-2 mr-1" />
+            已勾选 <strong class="text-gray-800">{{ getCheckedCount(selectedDevice.id) }}</strong> 个工作流
+          </span>
+
+          <div class="flex items-center gap-1.5" style="margin-left: 24px;">
+            <ToggleSwitch v-model="showViewer" input-id="viewer-switch" />
+            <label for="viewer-switch" class="text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">实时回显</label>
+          </div>
+
+          <span class="flex-1" />
+
+          <Button
+            v-if="!isRunning"
+            text
+            severity="success"
+            size="small"
+            icon="pi pi-play"
+            label="开始"
+            :disabled="getCheckedCount(selectedDevice.id) === 0"
+            @click="handleStart"
+          />
+          <template v-else>
+            <Button
+              v-if="!isPaused"
+              text
+              severity="info"
+              size="small"
+              icon="pi pi-pause"
+              label="暂停"
+              @click="handlePause"
+            />
+            <Button
+              v-else
+              text
+              severity="success"
+              size="small"
+              icon="pi pi-play"
+              label="恢复"
+              @click="handleResume"
+            />
+            <Button
+              text
+              severity="warn"
+              size="small"
+              icon="pi pi-stop"
+              label="停止"
+              @click="handleStop"
+            />
+          </template>
+
+          <span class="text-xs text-gray-500 font-mono flex items-center">
+            <i class="pi pi-clock mr-1" />{{ formatElapsed(elapsed) }}
+          </span>
+
+          <Button
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            icon="pi pi-trash"
+            title="清空日志"
+            @click="clearLogs"
+          />
+        </div>
+
         <!-- 实时看板：独立于日志区，受开关控制 -->
         <ExecutionViewer v-if="showViewer" :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" @manual-refresh="handleManualRefresh" />
-        <LogPanel
-          :logs="logs"
-          :checked-count="getCheckedCount(selectedDevice?.id ?? '')"
-          :is-running="isRunning"
-          :is-paused="isPaused"
-          :elapsed="elapsed"
-          :show-viewer="showViewer"
-          @start="handleStart"
-          @stop="handleStop"
-          @pause="handlePause"
-          @resume="handleResume"
-          @clear="clearLogs"
-          @toggle-viewer="showViewer = !showViewer"
-        />
+
+        <!-- 日志区 -->
+        <LogPanel :logs="logs" />
       </div>
     </template>
 
@@ -88,9 +146,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
+import ToggleSwitch from 'primevue/toggleswitch'
 import type { DeviceInfo } from '@automan/shared/types.js'
 import { DeviceRunStatus } from '@automan/shared/types.js'
 import { useDevices } from '../composables/useDevices.js'
@@ -104,9 +163,31 @@ import { deviceApi } from '../api/device.js'
 const { devices, loading, fetchDevices, deleteDevice } = useDevices()
 const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, pauseDevice, resumeDevice, clearLogs } = useWorkflowRun()
 
+const STORAGE_KEY_VIEWER = 'automan:showViewer'
+const STORAGE_KEY_DEVICE = 'automan:lastSelectedDeviceId'
+
 const selectedId = ref('')
-const showViewer = ref(true)
+const showViewer = ref(localStorage.getItem(STORAGE_KEY_VIEWER) !== 'false')
 const selectedDevice = computed(() => devices.value.find((d) => d.id === selectedId.value))
+
+/** 选中设备时持久化 */
+function selectDevice(id: string) {
+  selectedId.value = id
+  localStorage.setItem(STORAGE_KEY_DEVICE, id)
+}
+
+/** showViewer 变化时持久化 */
+watch(showViewer, (v) => {
+  localStorage.setItem(STORAGE_KEY_VIEWER, String(v))
+})
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const h = String(Math.floor(totalSec / 3600)).padStart(2, '0')
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0')
+  const s = String(totalSec % 60).padStart(2, '0')
+  return `${h}:${m}:${s}`
+}
 
 /** 当前设备的最新截图 */
 const deviceScreenshot = computed(() => {
@@ -144,9 +225,11 @@ async function handleManualRefresh() {
 
 onMounted(async () => {
   await fetchDevices()
-  // 默认选中第一个设备
   if (devices.value.length > 0 && !selectedId.value) {
-    selectedId.value = devices.value[0].id
+    // 优先恢复上次选中的设备
+    const lastId = localStorage.getItem(STORAGE_KEY_DEVICE)
+    const exists = lastId && devices.value.some((d) => d.id === lastId)
+    selectedId.value = exists ? lastId! : devices.value[0].id
   }
 })
 
