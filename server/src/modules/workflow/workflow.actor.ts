@@ -11,15 +11,12 @@ import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 import type { ScreenshotEvent } from './screenshot.dispatcher.js'
 import type { VisualAnnotation } from '@automan/shared/types.js'
 import type { DeviceSession } from './device.session.js'
-import { AdbService } from '../device/adb.service.js'
 
 /** WorkflowActor 配置 */
 export interface WorkflowActorConfig {
   runId: string
   workflow: Workflow
   deviceId: string
-  ldconsolePath: string
-  instanceIndex: number
   session: DeviceSession
   /** 运行配置（触发方式、计数上限等） */
   runConfig: WorkflowRunConfig
@@ -167,19 +164,17 @@ export class WorkflowActor extends ActorBase {
       // 初始化 local 变量（每次重置），session 变量保留
       const variables = this.initVariables()
 
-      const adbService = new AdbService()
       const ctx: EngineContext = {
         outputs: {},
         variables,
         screenshot: event.image,
         deviceId: this.config.deviceId,
-        adbPath: adbService.resolveAdbPath(this.config.ldconsolePath),
-        adbTarget: adbService.getTarget(this.config.instanceIndex),
+        adbPath: this.config.session.getAdbPath(),
+        adbTarget: this.config.session.getAdbTarget(),
+        scaleFactor: this.config.session.getScaleFactor(),
         annotations: [],
         screenshotWidth: event.width,
         screenshotHeight: event.height,
-        originalWidth: event.originalWidth,
-        originalHeight: event.originalHeight,
         shouldCancel: () => this.cancelled,
       }
 

@@ -1,19 +1,18 @@
 // ─────────────────────────────────────────────
 // 设备路由模块
-// 职责：设备 CRUD（list / create / delete）
+// 职责：设备 CRUD + 截屏/点击/滑动 + 设备发现/连接测试
 // 统一使用 POST/GET + ApiResponse 格式
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
 import sharp from 'sharp'
 import { db, devices } from '../db/index.js'
-import { config } from '../config.js'
+import { config, ADB_PATH } from '../config.js'
 import { eq } from 'drizzle-orm'
 import type {
   CreateDeviceRequest,
   DeleteDeviceRequest,
   DeviceInfo,
-  ListInstancesRequest,
   ScreenshotRequest,
   FindPicRequest,
   FindPicProRequest,
@@ -22,10 +21,13 @@ import type {
   AdbClickRequest,
   AdbAreaClickRequest,
   AdbSwipeRequest,
+  DiscoveredDevice,
+  TestConnectionRequest,
+  TestConnectionResponse,
 } from '@automan/shared/types.js'
 import { DeviceStatus } from '@automan/shared/types.js'
-import { LDPlayerService } from '../modules/device/ldplayer.service.js'
 import { AdbService } from '../modules/device/adb.service.js'
+import { computeScaleFactor, toActualPoint, toActualRegion } from '../modules/device/coordinate.js'
 import { findPic, findPicPro, getWords, findStr, adbClick, adbAreaClick, adbSwipe } from '../libs/index.js'
 
 /** 将 DB Row 转为 DeviceInfo */
@@ -33,15 +35,13 @@ function toDeviceInfo(row: typeof devices.$inferSelect): DeviceInfo {
   return {
     id: row.id,
     name: row.name,
-    ldconsolePath: row.ldconsolePath,
-    instanceIndex: row.instanceIndex,
+    adbAddress: row.adbAddress,
     status: row.status as DeviceStatus,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
 }
 
-const ldPlayer = new LDPlayerService()
 const adbService = new AdbService()
 
 export async function deviceRoutes(app: FastifyInstance): Promise<void> {
@@ -53,29 +53,28 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
 
   // ── 创建设备 ───────────────────────────────
   app.post<{ Body: CreateDeviceRequest }>('/api/devices/create', async (request, reply) => {
-    const { name, ldconsolePath, instanceIndex } = request.body
+    const { name, adbAddress } = request.body
 
     // 基础校验
-    if (!name || !ldconsolePath || instanceIndex === undefined) {
+    if (!name || !adbAddress) {
       return reply.status(400).send({
         success: false,
         code: 'INVALID_PARAMS',
-        message: 'name、ldconsolePath、instanceIndex 均为必填',
+        message: 'name、adbAddress 均为必填',
       })
     }
 
-    // 检查是否已绑定相同实例
+    // 唯一性校验：不允许重复 adbAddress
     const existing = db
       .select()
       .from(devices)
-      .where(eq(devices.ldconsolePath, ldconsolePath))
-      .all()
-    const duplicate = existing.find((d) => d.instanceIndex === instanceIndex)
-    if (duplicate) {
+      .where(eq(devices.adbAddress, adbAddress))
+      .get()
+    if (existing) {
       return reply.status(409).send({
         success: false,
-        code: 'DUPLICATE_INSTANCE',
-        message: `实例 ${instanceIndex} 已在设备「${duplicate.name}」中绑定`,
+        code: 'DUPLICATE',
+        message: `设备 ${adbAddress} 已绑定`,
       })
     }
 
@@ -86,8 +85,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       .values({
         id,
         name,
-        ldconsolePath,
-        instanceIndex,
+        adbAddress,
         status: DeviceStatus.STOPPED,
         createdAt: now,
         updatedAt: now,
@@ -95,7 +93,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       .run()
 
     const row = db.select().from(devices).where(eq(devices.id, id)).get()!
-    app.log.info(`Device created: ${name} [index=${instanceIndex}]`)
+    app.log.info(`Device created: ${name} [${adbAddress}]`)
     return { success: true as const, data: toDeviceInfo(row) }
   })
 
@@ -157,30 +155,61 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
     },
   )
 
-  // ── 查询模拟器实例列表 ────────────────────────
-  app.post<{ Body: ListInstancesRequest }>(
-    '/api/devices/instances',
+  // ── 扫描已连接设备 ────────────────────────────
+  app.post('/api/devices/discover', async (_request, reply) => {
+    try {
+      const adbPath = ADB_PATH
+      const discovered = await adbService.listDevices(adbPath)
+      return { success: true as const, data: discovered }
+    } catch (err) {
+      return reply.status(500).send({
+        success: false,
+        code: 'DISCOVER_FAILED',
+        message: err instanceof Error ? err.message : '设备扫描失败',
+      })
+    }
+  })
+
+  // ── 测试连接 ──────────────────────────────────
+  app.post<{ Body: TestConnectionRequest }>(
+    '/api/devices/test-connection',
     async (request, reply) => {
-      const { ldconsolePath } = request.body
-      if (!ldconsolePath) {
+      const { adbAddress } = request.body
+      if (!adbAddress) {
         return reply.status(400).send({
           success: false,
           code: 'INVALID_PARAMS',
-          message: 'ldconsolePath 为必填',
+          message: 'adbAddress 为必填',
         })
       }
 
-      const valid = await ldPlayer.validatePath(ldconsolePath)
-      if (!valid) {
-        return reply.status(400).send({
+      try {
+        const adbPath = ADB_PATH
+        const connected = await adbService.connect(adbPath, adbAddress)
+        if (!connected) {
+          const resp: TestConnectionResponse = {
+            success: false,
+            message: `无法连接到 ${adbAddress}，请确认设备在线且 USB 调试已开启`,
+          }
+          return { success: true as const, data: resp }
+        }
+
+        const size = await adbService.getScreenSize(adbPath, adbAddress)
+        const resp: TestConnectionResponse = {
+          success: true,
+          screenSize: size ?? undefined,
+          message: size
+            ? `连接成功，分辨率: ${size.width}x${size.height}`
+            : '连接成功，无法获取分辨率',
+        }
+        return { success: true as const, data: resp }
+      } catch (err) {
+        return reply.status(500).send({
           success: false,
-          code: 'INVALID_PATH',
-          message: 'ldconsole 路径无效或无法执行',
+          code: 'TEST_CONNECTION_FAILED',
+          message: err instanceof Error ? err.message : '测试连接失败',
         })
       }
-
-      const instances = await ldPlayer.listInstancesParsed(ldconsolePath)
-      return { success: true as const, data: instances }
     },
   )
 
@@ -208,17 +237,22 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const rawBuffer = await adbService.screencap(device.ldconsolePath, device.instanceIndex)
+        const adbPath = ADB_PATH
+        const rawBuffer = await adbService.screencap(adbPath, device.adbAddress)
 
         // 读取原始分辨率
         const rawMeta = await sharp(rawBuffer).metadata()
         const originalWidth = rawMeta.width ?? 0
         const originalHeight = rawMeta.height ?? 0
 
-        // 强制 resize 到标准分辨率宽度
-        const targetWidth = config.resolution.width
+        // resize 按最长边 1280（支持横屏/竖屏）
         const { data: resizedBuffer, info } = await sharp(rawBuffer)
-          .resize({ width: targetWidth })
+          .resize({
+            width: config.resolution.width,
+            height: config.resolution.width,
+            fit: 'inside',
+            withoutEnlargement: false,
+          })
           .png({ compressionLevel: 6 })
           .toBuffer({ resolveWithObject: true })
 
@@ -391,10 +425,13 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
-        const target = adbService.getTarget(device.instanceIndex)
-        await adbService.connect(adbPath, target)
-        const result = await adbClick(adbPath, target, point)
+        const adbPath = ADB_PATH
+        await adbService.connect(adbPath, device.adbAddress)
+        // 获取分辨率做坐标转换
+        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        const sf = size ? computeScaleFactor(size.width, size.height) : null
+        const [actualX, actualY] = sf ? toActualPoint(point[0], point[1], sf) : point
+        const result = await adbClick(adbPath, device.adbAddress, [actualX, actualY])
         return { success: true as const, data: result }
       } catch (err) {
         return reply.status(500).send({
@@ -429,10 +466,12 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
-        const target = adbService.getTarget(device.instanceIndex)
-        await adbService.connect(adbPath, target)
-        const result = await adbAreaClick(adbPath, target, region)
+        const adbPath = ADB_PATH
+        await adbService.connect(adbPath, device.adbAddress)
+        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        const sf = size ? computeScaleFactor(size.width, size.height) : null
+        const actualRegion = sf ? toActualRegion(region, sf) : region
+        const result = await adbAreaClick(adbPath, device.adbAddress, actualRegion)
         return { success: true as const, data: result }
       } catch (err) {
         return reply.status(500).send({
@@ -466,10 +505,13 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const adbPath = adbService.resolveAdbPath(device.ldconsolePath)
-        const target = adbService.getTarget(device.instanceIndex)
-        await adbService.connect(adbPath, target)
-        const result = await adbSwipe(adbPath, target, startRegion, endRegion, { padding, steps })
+        const adbPath = ADB_PATH
+        await adbService.connect(adbPath, device.adbAddress)
+        const size = await adbService.getScreenSize(adbPath, device.adbAddress)
+        const sf = size ? computeScaleFactor(size.width, size.height) : null
+        const actualStart = sf ? toActualRegion(startRegion, sf) : startRegion
+        const actualEnd = sf ? toActualRegion(endRegion, sf) : endRegion
+        const result = await adbSwipe(adbPath, device.adbAddress, actualStart, actualEnd, { padding, steps })
         return { success: true as const, data: result }
       } catch (err) {
         return reply.status(500).send({
@@ -480,15 +522,4 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   )
-}
-
-/** 从 PNG Buffer 解析图片尺寸 */
-function parsePngSize(buffer: Buffer): { width: number; height: number } {
-  // PNG IHDR chunk 从第 16 字节开始：4字节 width + 4字节 height
-  if (buffer.length >= 24 && buffer[0] === 0x89 && buffer[1] === 0x50) {
-    const width = buffer.readUInt32BE(16)
-    const height = buffer.readUInt32BE(20)
-    return { width, height }
-  }
-  return { width: 0, height: 0 }
 }

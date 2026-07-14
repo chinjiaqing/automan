@@ -13,8 +13,8 @@ import { config } from '../../config.js'
 export interface ScreenshotEvent {
   deviceId: string
   image: string // data:image/png;base64,...
-  width: number       // 压缩后宽度
-  height: number      // 压缩后高度
+  width: number       // 标准空间宽度
+  height: number      // 标准空间高度
   originalWidth: number   // 原始设备分辨率宽度
   originalHeight: number  // 原始设备分辨率高度
   timestamp: number
@@ -23,8 +23,8 @@ export interface ScreenshotEvent {
 /** 设备信息（用于截图） */
 export interface DeviceScreenshotInfo {
   id: string
-  ldconsolePath: string
-  instanceIndex: number
+  adbPath: string
+  adbTarget: string
 }
 
 /** 默认截图间隔（毫秒），从配置文件读取 */
@@ -46,7 +46,6 @@ export class ScreenshotDispatcher {
       const d = this.dispatchers.get(device.id)!
       d.subscribers++
       logger.info('ScreenshotDispatcher', `device ${device.id} subscriber++ (total: ${d.subscribers})`)
-      // 如果处于暂停状态，自动恢复
       if (d.paused) this.resume(device.id)
       return
     }
@@ -115,16 +114,21 @@ export class ScreenshotDispatcher {
   /** 截屏并分发（含压缩） */
   private async captureAndDispatch(device: DeviceScreenshotInfo): Promise<void> {
     try {
-      const rawBuf = await this.adbService.screencap(device.ldconsolePath, device.instanceIndex)
+      const rawBuf = await this.adbService.screencap(device.adbPath, device.adbTarget)
 
       // 获取原始分辨率
       const rawMeta = await sharp(rawBuf).metadata()
       const originalWidth = rawMeta.width ?? 0
       const originalHeight = rawMeta.height ?? 0
 
-      // 强制 resize 到标准分辨率宽度
+      // resize 按最长边 1280（支持横屏/竖屏）
       const { data, info } = await sharp(rawBuf)
-        .resize({ width: config.resolution.width })
+        .resize({
+          width: config.resolution.width,
+          height: config.resolution.width,
+          fit: 'inside',
+          withoutEnlargement: false,
+        })
         .png({ compressionLevel: 6 })
         .toBuffer({ resolveWithObject: true })
 

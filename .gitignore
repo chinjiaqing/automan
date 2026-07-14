@@ -61,3 +61,8 @@ pnpm-debug.log*
 # ── 分发运行时（start.bat 自动下载，不提交） ──
 .bin/
 .venv/
+runtime/
+
+# ── IDE / 工具 ───────────────────────────────────
+.qoder/
+.workbuddy/

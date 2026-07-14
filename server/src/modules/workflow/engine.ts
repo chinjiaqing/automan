@@ -6,6 +6,7 @@
 import type { Workflow, WorkflowNode, WorkflowEdge } from '@automan/shared/types.js'
 import { logger } from '../../core/logger.js'
 import { resolveValue, evaluateCondition } from './refResolver.js'
+import { toActualPoint, toActualRegion, type ScaleFactor } from '../device/coordinate.js'
 import { findPicPro } from '../../libs/find-pic-pro.js'
 import { getWords } from '../../libs/ocr.js'
 import { findStr } from '../../libs/ocr.js'
@@ -41,13 +42,11 @@ export interface EngineContext {
   deviceId: string
   adbPath: string
   adbTarget: string
+  scaleFactor: ScaleFactor
   annotations: RawAnnotation[]
-  /** 截图尺寸（始终 = 标准分辨率） */
+  /** 截图尺寸（标准空间，最长边 1280） */
   screenshotWidth: number
   screenshotHeight: number
-  /** 原始设备分辨率（用于 ADB 操作坐标转换） */
-  originalWidth: number
-  originalHeight: number
   /** 取消检查回调，返回 true 表示应中止执行 */
   shouldCancel?: () => boolean
 }
@@ -651,7 +650,8 @@ export class WorkflowEngine {
     const rawX = Number(resolveValue(node.config.x, ctx.outputs) ?? 0)
     const rawY = Number(resolveValue(node.config.y, ctx.outputs) ?? 0)
     const [x, y] = clampPoint(rawX, rawY, ctx.screenshotWidth, ctx.screenshotHeight)
-    await adbClick(ctx.adbPath, ctx.adbTarget, [x, y])
+    const [actualX, actualY] = toActualPoint(x, y, ctx.scaleFactor)
+    await adbClick(ctx.adbPath, ctx.adbTarget, [actualX, actualY])
     ctx.annotations.push({
       type: 'click',
       nodeId: node.id,
@@ -667,7 +667,8 @@ export class WorkflowEngine {
       ctx.screenshotWidth,
       ctx.screenshotHeight,
     )
-    await adbAreaClick(ctx.adbPath, ctx.adbTarget, region)
+    const actualRegion = toActualRegion(region, ctx.scaleFactor)
+    await adbAreaClick(ctx.adbPath, ctx.adbTarget, actualRegion)
     const cx = Math.round((region[0] + region[2]) / 2)
     const cy = Math.round((region[1] + region[3]) / 2)
     ctx.annotations.push({
@@ -692,7 +693,9 @@ export class WorkflowEngine {
     )
     const padding = Number(node.config.padding ?? 0)
 
-    const result = await adbSwipe(ctx.adbPath, ctx.adbTarget, startRegion, endRegion, { padding })
+    const actualStart = toActualRegion(startRegion, ctx.scaleFactor)
+    const actualEnd = toActualRegion(endRegion, ctx.scaleFactor)
+    const result = await adbSwipe(ctx.adbPath, ctx.adbTarget, actualStart, actualEnd, { padding })
 
     ctx.outputs[node.id] = {
       startX: result.startX,

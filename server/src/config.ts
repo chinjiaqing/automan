@@ -5,10 +5,16 @@
 
 import JSON5 from 'json5'
 import { readFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+/** 项目根目录（server/src → server → project root） */
+const PROJECT_ROOT = resolve(__dirname, '..', '..')
+
+/** ADB 可执行文件路径（内置于 runtime 目录，无需用户配置） */
+export const ADB_PATH = join(PROJECT_ROOT, 'runtime', 'adb.exe')
 
 /** 配置类型定义 */
 export interface AutomanConfig {

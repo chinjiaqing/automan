@@ -11,7 +11,7 @@ import * as schema from './schema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // 数据库文件：项目根目录/data/automan.db
-const DB_PATH = resolve(__dirname, '..', '..', '..', '..', 'data', 'automan.db')
+const DB_PATH = resolve(__dirname, '..', '..', '..', 'data', 'automan.db')
 
 // 确保 data/ 目录存在
 mkdirSync(dirname(DB_PATH), { recursive: true })

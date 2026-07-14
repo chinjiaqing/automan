@@ -26,6 +26,7 @@
             :class="getDeviceStatusIcon(device)"
           />
           <span class="flex-1 text-sm truncate">{{ device.name }}</span>
+          <span class="text-xs text-gray-400 truncate max-w-20" :title="device.adbAddress">{{ device.adbAddress }}</span>
           <div v-if="!isDeviceActive(device.id)" class="hidden group-hover:flex items-center gap-0.5">
             <Button text rounded severity="secondary" size="small" icon="pi pi-pencil" title="重命名" @click.stop="openEdit(device)" />
             <Button text rounded severity="danger" size="small" icon="pi pi-trash" title="删除" @click.stop="confirmDelete(device)" />

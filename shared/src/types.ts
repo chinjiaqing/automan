@@ -149,8 +149,7 @@ export type ApiResult<T = unknown> = ApiResponse<T> | ApiError
 /** 创建设备请求 */
 export interface CreateDeviceRequest {
   name: string
-  ldconsolePath: string
-  instanceIndex: number
+  adbAddress: string
 }
 
 /** 删除设备请求 */
@@ -172,21 +171,30 @@ export enum DeviceStatus {
 export interface DeviceInfo {
   id: string
   name: string
-  ldconsolePath: string
-  instanceIndex: number
+  adbAddress: string
   status: DeviceStatus
   createdAt: number
   updatedAt: number
 }
 
-/** ldconsole list2 解析后的实例信息 */
-export interface LDInstanceInfo {
-  index: number
-  name: string
-  topHandle: number
-  boxHandle: number
-  running: boolean
-  pid: number
+/** 扫描到的 ADB 设备 */
+export interface DiscoveredDevice {
+  serial: string
+  status: string
+  model?: string
+  transportType: 'usb' | 'wifi' | 'emulator'
+}
+
+/** 测试连接请求 */
+export interface TestConnectionRequest {
+  adbAddress: string
+}
+
+/** 测试连接响应 */
+export interface TestConnectionResponse {
+  success: boolean
+  screenSize?: { width: number; height: number }
+  message?: string
 }
 
 // ─────────────────────────────────────────────
@@ -207,10 +215,7 @@ export interface BrowseResponse {
   entries: FileEntry[]
 }
 
-/** 实例查询请求 */
-export interface ListInstancesRequest {
-  ldconsolePath: string
-}
+
 
 // ─────────────────────────────────────────────
 // 截屏

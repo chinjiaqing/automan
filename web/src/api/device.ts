@@ -4,7 +4,9 @@ import type {
   CreateDeviceRequest,
   DeleteDeviceRequest,
   BrowseResponse,
-  LDInstanceInfo,
+  DiscoveredDevice,
+  TestConnectionRequest,
+  TestConnectionResponse,
   ScreenshotResponse,
   FindPicRequest,
   FindPicResponse,
@@ -35,9 +37,12 @@ export const deviceApi = {
   update: (data: { id: string; name: string }) =>
     api.post<DeviceInfo>('/api/devices/update', data),
 
-  /** 查询模拟器实例列表 */
-  instances: (ldconsolePath: string) =>
-    api.post<LDInstanceInfo[]>('/api/devices/instances', { ldconsolePath }),
+  /** 扫描已连接设备 */
+  discover: () => api.post<DiscoveredDevice[]>('/api/devices/discover', {}),
+
+  /** 测试连接 */
+  testConnection: (data: TestConnectionRequest) =>
+    api.post<TestConnectionResponse>('/api/devices/test-connection', data),
 
   /** 设备截屏 */
   screenshot: (deviceId: string) =>

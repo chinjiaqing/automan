@@ -13,6 +13,7 @@ import { db, workflows, devices, workflowRunConfigs } from '../../db/index.js'
 import { eq, and } from 'drizzle-orm'
 import { logger } from '../../core/logger.js'
 import { eventBus, EventBusEvent } from '../../core/event-bus.js'
+import { ADB_PATH } from '../../config.js'
 
 export class WorkflowService {
   private actors = new Map<string, WorkflowActor>()
@@ -109,11 +110,12 @@ export class WorkflowService {
     }
 
     // 设备就绪检测（设备级会话，多工作流共享同一次检测）
+    const adbPath = ADB_PATH
     const session = this.getOrCreateDeviceSession({
       deviceId: devRow.id,
       deviceName: devRow.name,
-      ldconsolePath: devRow.ldconsolePath,
-      instanceIndex: devRow.instanceIndex,
+      adbPath,
+      adbTarget: devRow.adbAddress,
     })
     // 注意：不在此处 await ensureReady()
     // 设备就绪检测由 WorkflowActor 在后台等待，避免阻塞 HTTP 请求
@@ -129,8 +131,6 @@ export class WorkflowService {
       runId,
       workflow,
       deviceId,
-      ldconsolePath: devRow.ldconsolePath,
-      instanceIndex: devRow.instanceIndex,
       session,
       runConfig,
     }
@@ -147,8 +147,8 @@ export class WorkflowService {
     // 启动截图调度器（每设备共享）
     const deviceInfo: DeviceScreenshotInfo = {
       id: devRow.id,
-      ldconsolePath: devRow.ldconsolePath,
-      instanceIndex: devRow.instanceIndex,
+      adbPath,
+      adbTarget: devRow.adbAddress,
     }
     this.dispatcher.start(deviceInfo, screenshotInterval ?? 2000)
 
@@ -182,11 +182,12 @@ export class WorkflowService {
     if (!devRow) throw new Error(`设备 ${deviceId} 不存在`)
 
     // 创建设备会话（幂等）
+    const adbPath = ADB_PATH
     const session = this.getOrCreateDeviceSession({
       deviceId: devRow.id,
       deviceName: devRow.name,
-      ldconsolePath: devRow.ldconsolePath,
-      instanceIndex: devRow.instanceIndex,
+      adbPath,
+      adbTarget: devRow.adbAddress,
     })
 
     // 注意：不在此处 await ensureReady()！
@@ -196,8 +197,8 @@ export class WorkflowService {
 
     const deviceInfo: DeviceScreenshotInfo = {
       id: devRow.id,
-      ldconsolePath: devRow.ldconsolePath,
-      instanceIndex: devRow.instanceIndex,
+      adbPath,
+      adbTarget: devRow.adbAddress,
     }
     // 启动截图调度器（幂等，subscribers++）
     this.dispatcher.start(deviceInfo, screenshotInterval ?? 2000)
@@ -241,8 +242,6 @@ export class WorkflowService {
           runId,
           workflow,
           deviceId,
-          ldconsolePath: devRow.ldconsolePath,
-          instanceIndex: devRow.instanceIndex,
           session,
           runConfig,
         }
@@ -279,8 +278,8 @@ export class WorkflowService {
   private getOrCreateDeviceSession(cfg: {
     deviceId: string
     deviceName: string
-    ldconsolePath: string
-    instanceIndex: number
+    adbPath: string
+    adbTarget: string
   }): DeviceSession {
     if (!this.deviceSessions.has(cfg.deviceId)) {
       const session = new DeviceSession(cfg)

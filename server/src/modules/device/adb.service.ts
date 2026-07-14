@@ -1,11 +1,10 @@
 // ─────────────────────────────────────────────
-// AdbService — ADB 命令封装
-// 职责：封装 adb.exe 的 connect / screencap 等命令
-// adb.exe 路径由雷电模拟器安装目录提供（与 ldconsole.exe 同目录）
+// AdbService — ADB 命令封装（通用）
+// 职责：封装 adb.exe 的 connect / screencap / shell 等命令
+// 不区分模拟器或真机，统一通过 adbPath + target 寻址
 // ─────────────────────────────────────────────
 
 import { execFile } from 'node:child_process'
-import { resolve } from 'node:path'
 import iconv from 'iconv-lite'
 import { logger } from '../../core/logger.js'
 
@@ -13,37 +12,35 @@ import { logger } from '../../core/logger.js'
 const ADB_CONNECT_TIMEOUT = 5_000
 const ADB_SCREENCAP_TIMEOUT = 10_000
 const ADB_SHELL_TIMEOUT = 5_000
+const ADB_DEVICES_TIMEOUT = 5_000
+
+/** 扫描到的设备条目 */
+export interface DiscoveredDevice {
+  serial: string        // USB 序列号 或 ip:port
+  status: string        // 'device' | 'offline' | 'unauthorized'
+  model?: string
+  transportType: 'usb' | 'wifi' | 'emulator'
+}
 
 export class AdbService {
   /**
-   * 根据 ldconsole 路径推导 adb.exe 路径
-   * 雷电模拟器安装目录下自带 adb.exe
-   */
-  resolveAdbPath(ldconsolePath: string): string {
-    const dir = ldconsolePath.replace(/[\\/]ldconsole\.exe$/i, '')
-    return resolve(dir, 'adb.exe')
-  }
-
-  /**
-   * 根据实例 index 计算 ADB 端口
-   * 雷电模拟器规则：5555 + index * 2
-   */
-  getAdbPort(index: number): number {
-    return 5555 + index * 2
-  }
-
-  /**
-   * 获取 ADB 目标地址（如 127.0.0.1:5555）
-   */
-  getTarget(index: number): string {
-    return `127.0.0.1:${this.getAdbPort(index)}`
-  }
-
-  /**
    * 连接 ADB 设备
+   * USB 设备已在线无需 connect，仅对网络设备执行 adb connect
    * 返回是否连接成功
    */
   async connect(adbPath: string, target: string): Promise<boolean> {
+    // 先检查设备是否已经在线（USB 设备无需 connect）
+    try {
+      const devices = await this.listDevices(adbPath)
+      const found = devices.find((d) => d.serial === target && d.status === 'device')
+      if (found) {
+        logger.info('AdbService', `${target} already connected`)
+        return true
+      }
+    } catch {
+      // listDevices 失败则继续尝试 connect
+    }
+
     logger.info('AdbService', `connect ${target}`)
     return new Promise((resolveP) => {
       execFile(
@@ -139,18 +136,15 @@ export class AdbService {
   }
 
   /**
-   * 通过 ADB screencap 截取模拟器画面
+   * 通过 ADB screencap 截取设备画面
    * 截屏前会自动 adb connect 目标设备
    * 返回 PNG 二进制 Buffer
    */
-  async screencap(ldconsolePath: string, index: number): Promise<Buffer> {
-    const adbPath = this.resolveAdbPath(ldconsolePath)
-    const target = this.getTarget(index)
-
+  async screencap(adbPath: string, target: string): Promise<Buffer> {
     // 截屏前先尝试 connect
     const connected = await this.connect(adbPath, target)
     if (!connected) {
-      throw new Error(`ADB 无法连接到 ${target}，请确认模拟器已启动且 ADB 端口正确`)
+      throw new Error(`ADB 无法连接到 ${target}，请确认设备在线且 ADB 端口正确`)
     }
 
     logger.info('AdbService', `screencap: adb -s ${target} exec-out screencap -p`)
@@ -169,13 +163,95 @@ export class AdbService {
           const buf = Buffer.from(stdoutBuf)
           // PNG 文件头校验：前 2 字节为 0x89 0x50
           if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50) {
-            reject(new Error('screencap 返回数据不是有效的 PNG（可能模拟器未启动或 ADB 未连接）'))
+            reject(new Error('screencap 返回数据不是有效的 PNG（可能设备未启动或 ADB 未连接）'))
             return
           }
           logger.info('AdbService', `screencap ok: ${buf.length} bytes`)
           resolveP(buf)
         },
       )
+    })
+  }
+
+  /**
+   * 扫描已连接的 ADB 设备列表
+   * 执行 `adb devices -l`，解析输出
+   */
+  async listDevices(adbPath: string): Promise<DiscoveredDevice[]> {
+    return new Promise((resolveP, reject) => {
+      execFile(
+        adbPath,
+        ['devices', '-l'],
+        { timeout: ADB_DEVICES_TIMEOUT, windowsHide: true, encoding: 'buffer' },
+        (err, stdoutBuf) => {
+          if (err) {
+            reject(new Error(`adb devices failed: ${err.message}`))
+            return
+          }
+          const output = iconv.decode(Buffer.from(stdoutBuf), 'utf-8')
+          const devices = this.parseDevicesOutput(output)
+          resolveP(devices)
+        },
+      )
+    })
+  }
+
+  /**
+   * 解析 `adb devices -l` 输出
+   * 示例行：
+   *   ABCDEF123456    device    transport_id:1 product:raven model:Pixel_6_Pro device:raven
+   *   192.168.1.5:5555  device    transport_id:2 product:xxx model:Redmi device:xxx
+   *   emulator-5554    device    product:xxx model:xxx device:xxx
+   */
+  private parseDevicesOutput(output: string): DiscoveredDevice[] {
+    const result: DiscoveredDevice[] = []
+    const lines = output.split('\n').slice(1) // 跳过 "List of devices attached" 标题行
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+
+      const parts = trimmed.split(/\s+/)
+      if (parts.length < 2) continue
+
+      const rawSerial = parts[0]
+      const status = parts[1]
+
+      // 从后续键值对中解析 model
+      const kvPairs = parts.slice(2)
+      const model = kvPairs.find((p) => p.startsWith('model:'))?.replace('model:', '')
+
+      // 判断设备类型并转换 serial 为可连接地址
+      let serial = rawSerial
+      let transportType: 'usb' | 'wifi' | 'emulator'
+
+      if (rawSerial.startsWith('emulator-')) {
+        // 模拟器：emulator-5554 的 ADB 端口 = 5554 + 1 = 5555
+        transportType = 'emulator'
+        const consolePort = parseInt(rawSerial.replace('emulator-', ''), 10)
+        if (!isNaN(consolePort)) {
+          serial = `127.0.0.1:${consolePort + 1}`
+        }
+      } else if (rawSerial.startsWith('127.0.0.1:')) {
+        // 本地网络设备（如雷电模拟器 127.0.0.1:5555）
+        transportType = 'emulator'
+      } else if (/[:]/.test(rawSerial)) {
+        // 远程 WiFi 设备（如 192.168.1.5:5555）
+        transportType = 'wifi'
+      } else {
+        // USB 真机（纯序列号，如 ABCDEF123456）
+        transportType = 'usb'
+      }
+
+      result.push({ serial, status, model, transportType })
+    }
+
+    // 去重：emulator-5554 和 127.0.0.1:5555 可能指向同一设备
+    const seen = new Set<string>()
+    return result.filter((d) => {
+      if (seen.has(d.serial)) return false
+      seen.add(d.serial)
+      return true
     })
   }
 }

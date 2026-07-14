@@ -10,14 +10,13 @@ export const devices = sqliteTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    ldconsolePath: text('ldconsole_path').notNull(),
-    instanceIndex: integer('instance_index').notNull(),
+    adbAddress: text('adb_address').notNull().default(''),  // ★ 统一 ADB 寻址
     status: text('status', { enum: ['running', 'stopped'] }).notNull().default('stopped'),
     createdAt: integer('created_at', { mode: 'number' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
   },
   (table) => [
-    uniqueIndex('devices_ldconsole_idx').on(table.ldconsolePath, table.instanceIndex),
+    uniqueIndex('devices_adb_address_idx').on(table.adbAddress),
   ],
 )
 
@@ -76,3 +75,4 @@ export const workflowRunConfigs = sqliteTable(
 
 export type WorkflowRunConfigRow = typeof workflowRunConfigs.$inferSelect
 export type NewWorkflowRunConfigRow = typeof workflowRunConfigs.$inferInsert
+
