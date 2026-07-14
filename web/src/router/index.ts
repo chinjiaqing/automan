@@ -32,6 +32,11 @@ const router = createRouter({
           component: () => import('../views/FlowView.vue'),
         },
         {
+          path: 'fragments',
+          name: 'fragments',
+          component: () => import('../views/FragmentView.vue'),
+        },
+        {
           path: 'ai-flow',
           name: 'ai-flow',
           component: () => import('../views/AiFlowView.vue'),

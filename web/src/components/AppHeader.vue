@@ -14,13 +14,14 @@
           v-for="item in navItems"
           :key="item.name"
           :to="{ name: item.name }"
-          class="px-3 py-1.5 text-sm rounded-md transition-colors"
+          class="px-3 py-1.5 text-sm rounded-md transition-colors inline-flex items-center gap-0.5"
           :class="isActive(item.name)
             ? 'bg-brand-50 text-brand-700 font-medium'
             : 'text-gray-600 hover:bg-gray-100'"
         >
-          <i :class="`pi ${item.icon} mr-1`" />
+          <i :class="`pi ${item.icon}`" />
           {{ item.label }}
+          <span v-if="item.beta" class="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1 rounded leading-tight">BETA</span>
         </router-link>
       </nav>
 
@@ -49,6 +50,7 @@ const navItems = [
   { name: 'home', label: '首页', icon: 'pi-home' },
   { name: 'track', label: '开发板', icon: 'pi-image' },
   { name: 'flow', label: '编排', icon: 'pi-sitemap' },
+  { name: 'fragments', label: '片段', icon: 'pi-code', beta: true },
   { name: 'ai-flow', label: 'AI编排', icon: 'pi-bolt' },
 ]
 

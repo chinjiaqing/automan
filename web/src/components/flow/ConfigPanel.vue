@@ -151,10 +151,10 @@
       </template>
 
       <!-- 输出端口信息 -->
-      <div v-if="nodeDef.outputs.length" class="config-panel__outputs">
+      <div v-if="effectiveOutputs.length" class="config-panel__outputs">
         <div class="config-panel__label mb-1">输出端口</div>
         <div
-          v-for="out in nodeDef.outputs"
+          v-for="out in effectiveOutputs"
           :key="out.key"
           class="text-xs text-gray-500 flex items-center gap-1"
         >
@@ -163,6 +163,32 @@
           <span class="text-gray-400">({{ out.dataType }})</span>
         </div>
       </div>
+
+      <!-- call 节点：片段输入参数表单 -->
+      <template v-if="nodeType === 'call' && selectedFragment">
+        <div class="config-panel__outputs">
+          <div class="config-panel__label mb-1">输入参数</div>
+          <div v-for="param in selectedFragment.inputs" :key="param.name" class="config-panel__field">
+            <label class="config-panel__label">{{ param.label || param.name }}</label>
+            <DataRefInput
+              :value="getConfig(`arg_${param.name}`) as string"
+              :placeholder="`默认: ${param.defaultValue ?? ''}`"
+              :upstream-nodes="upstreamNodes"
+              @update:modelValue="setConfig(`arg_${param.name}`, $event)"
+            />
+          </div>
+          <div v-if="selectedFragment.inputs.length === 0" class="text-xs text-gray-400 py-1">无输入参数</div>
+        </div>
+        <div v-if="selectedFragment.outputs.length" class="config-panel__outputs">
+          <div class="config-panel__label mb-1">返回输出</div>
+          <div v-for="param in selectedFragment.outputs" :key="param.name"
+            class="text-xs text-gray-500 flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-blue-400" />
+            {{ param.label || param.name }}
+            <span class="text-gray-400">({{ param.type }})</span>
+          </div>
+        </div>
+      </template>
     </div>
   </aside>
 
@@ -183,18 +209,25 @@ import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import { getNodeTypeDef } from '../../flow/nodeTypes.js'
-import type { NodeTypeDefinition, FieldSchema } from '@automan/shared/types.js'
+import type { NodeTypeDefinition, FieldSchema, Fragment, OutputPort } from '@automan/shared/types.js'
 import DataRefInput from './DataRefInput.vue'
 import DataSourceSelect from './DataSourceSelect.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   nodeType: string
   nodeId: string
   nodeLabel: string
   config: Record<string, unknown>
   upstreamNodes: Array<{ id: string; label: string; type: string }>
   dataNodes: Array<{ name: string; label: string; nodeId: string; scope?: string }>
-}>()
+  /** call 节点专用：片段列表 */
+  fragments?: Fragment[]
+  /** 片段编辑器模式：隐藏作用域字段，强制为"本轮" */
+  fragmentMode?: boolean
+}>(), {
+  fragments: () => [],
+  fragmentMode: false,
+})
 
 const emit = defineEmits<{
   'update:config': [key: string, value: unknown]
@@ -202,6 +235,26 @@ const emit = defineEmits<{
 }>()
 
 const nodeDef = computed(() => getNodeTypeDef(props.nodeType))
+
+/** call 节点：当前选中的片段 */
+const selectedFragment = computed(() => {
+  if (props.nodeType !== 'call' || !props.fragments.length) return null
+  const fragId = props.config?.fragmentId as string
+  if (!fragId) return null
+  return props.fragments.find((f) => f.id === fragId) ?? null
+})
+
+/** 输出端口：call 节点从片段 outputs 动态生成，其他节点从 nodeDef 读取 */
+const effectiveOutputs = computed<OutputPort[]>(() => {
+  if (props.nodeType === 'call' && selectedFragment.value) {
+    return selectedFragment.value.outputs.map((p) => ({
+      key: p.name,
+      label: p.label || p.name,
+      dataType: p.type === 'number' ? 'number' : 'string',
+    }))
+  }
+  return nodeDef.value?.outputs ?? []
+})
 
 const fileRefs = ref<Record<string, HTMLInputElement | null>>({})
 
@@ -213,6 +266,10 @@ const optionLabels: Record<string, Record<string, string>> = {
 
 /** 将 string[] 选项转为 {label, value}[] 格式，有中文映射时使用中文 */
 function getSelectOptions(field: FieldSchema): Array<{ label: string; value: string }> {
+  // call 节点的 fragmentId：从片段列表动态生成
+  if (field.key === 'fragmentId' && props.fragments.length > 0) {
+    return props.fragments.map((f) => ({ label: f.name, value: f.id }))
+  }
   const labels = optionLabels[field.key]
   return (field.options ?? []).map((opt: string) => ({
     label: labels?.[opt] ?? opt,
@@ -248,6 +305,8 @@ function onDataSourceSelect(key: string, name: string) {
 }
 
 function shouldShow(field: FieldSchema): boolean {
+  // 片段模式下隐藏作用域字段（强制为"本轮"）
+  if (props.fragmentMode && field.key === 'scope') return false
   if (!field.showWhen) return true
   return Object.entries(field.showWhen).every(([k, v]) => {
     const current = String(props.config?.[k])

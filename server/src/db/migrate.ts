@@ -62,6 +62,31 @@ export function runMigrations(): void {
     )
   `)
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS "run_config_device_wf_unique" ON "workflow_run_configs" ("device_id","workflow_id")`)
+
+  // fragment_groups
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS "fragment_groups" (
+      "id" text PRIMARY KEY NOT NULL,
+      "name" text NOT NULL,
+      "sort" integer NOT NULL DEFAULT 0
+    )
+  `)
+
+  // fragments
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS "fragments" (
+      "id" text PRIMARY KEY NOT NULL,
+      "name" text NOT NULL,
+      "description" text NOT NULL DEFAULT '',
+      "group_id" text NOT NULL DEFAULT '',
+      "inputs_json" text NOT NULL DEFAULT '[]',
+      "outputs_json" text NOT NULL DEFAULT '[]',
+      "nodes_json" text NOT NULL DEFAULT '[]',
+      "edges_json" text NOT NULL DEFAULT '[]',
+      "created_at" integer NOT NULL,
+      "updated_at" integer NOT NULL
+    )
+  `)
 }
 
 /**

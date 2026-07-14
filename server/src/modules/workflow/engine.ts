@@ -54,6 +54,13 @@ export interface EngineContext {
   screenshotHeight: number
   /** 取消检查回调，返回 true 表示应中止执行 */
   shouldCancel?: () => boolean
+  /** 片段加载器（call 节点用） */
+  fragmentLoader?: (fragmentId: string) => Promise<{
+    nodes: WorkflowNode[]
+    edges: WorkflowEdge[]
+    inputs: Array<{ name: string; type: string; defaultValue?: string }>
+    outputs: Array<{ name: string; type: string; defaultValue?: string }>
+  } | null>
 }
 
 /** 单次执行结果 */
@@ -310,6 +317,23 @@ export class WorkflowEngine {
             break
           }
 
+          case 'call': {
+            const callResult = await this.execCall(node, ctx, emit, steps)
+            steps = callResult.steps
+            if (callResult.error) {
+              return { success: false, variables: ctx.variables, outputSummary: ctx.outputs, error: callResult.error, stepsExecuted: steps }
+            }
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'return': {
+            // return 节点在 workflow 级别无意义，跳过
+            emit('warn', `[${nodeLabel(node)}] return 节点只能在片段中使用`)
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
           default:
             emit('warn', `未知节点类型: ${node.type}`)
             currentNodeId = this.followEdge(node.id, undefined, adj)
@@ -557,6 +581,254 @@ export class WorkflowEngine {
 
     emit('warn', `loop 达到最大迭代 ${maxIter}`)
     return { nextNodeId: this.followEdge(loopNode.id, 'exit', adj), steps }
+  }
+
+  /**
+   * 执行 call 节点：内联展开片段
+   * 变量隔离：片段内部变量不影响父级；输入参数通过 arg_* 配置注入；输出通过 return 节点写回
+   */
+  private async execCall(
+    callNode: WorkflowNode,
+    ctx: EngineContext,
+    emit: LogFn,
+    startSteps: number,
+  ): Promise<{ steps: number; error?: string }> {
+    const fragmentId = callNode.config.fragmentId as string
+    if (!fragmentId) return { steps: startSteps, error: `[${nodeLabel(callNode)}] 未选择片段` }
+    if (!ctx.fragmentLoader) return { steps: startSteps, error: `[${nodeLabel(callNode)}] 片段加载器未初始化` }
+
+    const frag = await ctx.fragmentLoader(fragmentId)
+    if (!frag) return { steps: startSteps, error: `[${nodeLabel(callNode)}] 片段 ${fragmentId} 不存在` }
+
+    emit('info', `[${nodeLabel(callNode)}] 调用片段: ${fragmentId}`)
+
+    // 变量隔离：快照当前变量，片段结束后恢复
+    const savedVars = { ...ctx.variables }
+    // 保存旧的 outputs，片段内部的 outputs 不污染父级
+    const savedOutputs = { ...ctx.outputs }
+
+    // 注入输出参数的默认值（output 声明即变量）
+    for (const param of frag.outputs) {
+      ctx.variables[param.name] = param.defaultValue ?? (param.type === 'number' ? 0 : '')
+    }
+
+    // 注入输入参数
+    for (const param of frag.inputs) {
+      const rawArg = callNode.config[`arg_${param.name}`]
+      const resolved = rawArg !== undefined && rawArg !== ''
+        ? resolveValue(rawArg, savedOutputs, savedVars)
+        : param.defaultValue
+      ctx.variables[param.name] = resolved
+    }
+
+    // 构建片段内部的邻接表和节点 map
+    const fragAdj = new Map<string, Map<string | undefined, string>>()
+    const fragNodeMap = new Map<string, WorkflowNode>()
+    for (const node of frag.nodes) fragNodeMap.set(node.id, node)
+    for (const edge of frag.edges) {
+      if (!fragAdj.has(edge.source)) fragAdj.set(edge.source, new Map())
+      fragAdj.get(edge.source)!.set(edge.sourceHandle ?? undefined, edge.target)
+    }
+
+    // 从 start 节点后开始执行
+    const startNode = frag.nodes.find((n) => n.type === 'start')
+    if (!startNode) {
+      Object.assign(ctx.variables, savedVars)
+      return { steps: startSteps, error: `[${nodeLabel(callNode)}] 片段缺少 start 节点` }
+    }
+
+    let nodeId: string | undefined = this.followEdge(startNode.id, undefined, fragAdj)
+    let steps = startSteps
+    let fragmentOutputs: Record<string, unknown> = {}
+
+    while (nodeId && steps < MAX_GLOBAL_STEPS) {
+      if (ctx.shouldCancel?.()) {
+        Object.assign(ctx.variables, savedVars)
+        return { steps, error: '用户手动停止' }
+      }
+
+      const innerNode = fragNodeMap.get(nodeId)
+      if (!innerNode) break
+      steps++
+
+      switch (innerNode.type) {
+        case 'start':
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'return': {
+          // 收集输出值
+          for (const param of frag.outputs) {
+            const rawVal = innerNode.config[param.name]
+            fragmentOutputs[param.name] = resolveValue(rawVal, ctx.outputs, ctx.variables)
+          }
+          emit('info', `[${nodeLabel(callNode)}] 片段返回: ${JSON.stringify(fragmentOutputs)}`)
+          // 恢复父级变量，写入输出
+          ctx.outputs = savedOutputs
+          ctx.variables = savedVars
+          ctx.outputs[callNode.id] = fragmentOutputs
+          return { steps }
+        }
+
+        case 'end':
+          // 自然结束（无 return），从变量中提取输出值
+          for (const param of frag.outputs) {
+            if (param.name in ctx.variables) {
+              fragmentOutputs[param.name] = ctx.variables[param.name]
+            }
+          }
+          ctx.outputs = savedOutputs
+          ctx.variables = savedVars
+          ctx.outputs[callNode.id] = fragmentOutputs
+          return { steps }
+
+        // 复用父级的各节点执行方法
+        case 'variable':
+          this.execVariable(innerNode, ctx)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'condition': {
+          const r = this.evalCondition(innerNode, ctx)
+          ctx.outputs[innerNode.id] = { result: r }
+          emit('info', `[${nodeLabel(innerNode)}] ${r}`)
+          nodeId = this.followEdge(innerNode.id, r ? 'true' : 'false', fragAdj)
+          break
+        }
+
+        case 'loop': {
+          const loopResult = await this.execLoop(innerNode, frag.nodes, frag.edges, fragAdj, fragNodeMap, ctx, emit, steps)
+          steps = loopResult.steps
+          nodeId = loopResult.nextNodeId
+          break
+        }
+
+        case 'findPic':
+          await this.execFindPic(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'ocrWords':
+          await this.execOcrWords(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'ocrFindStr':
+          await this.execOcrFindStr(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'click':
+          await this.execClick(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'areaClick':
+          await this.execAreaClick(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'swipe':
+          await this.execSwipe(innerNode, ctx, emit)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+
+        case 'delay': {
+          const ms = Number(innerNode.config.ms ?? 1000)
+          emit('info', `[${nodeLabel(innerNode)}] ${ms}ms`)
+          await new Promise<void>((r) => setTimeout(r, ms))
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'randomDelay': {
+          const rawLeft = Number(resolveValue(innerNode.config.left, ctx.outputs, ctx.variables) ?? 0)
+          const rawRight = Number(resolveValue(innerNode.config.right, ctx.outputs, ctx.variables) ?? 1000)
+          const left = Math.max(0, Math.min(rawLeft, rawRight))
+          const right = Math.max(left, rawRight)
+          const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
+          ctx.outputs[innerNode.id] = { actualMs }
+          emit('info', `[${nodeLabel(innerNode)}] ${actualMs}ms`)
+          await new Promise<void>((r) => setTimeout(r, actualMs))
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'launchApp': {
+          const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
+          if (pkg) {
+            emit('info', `[${nodeLabel(innerNode)}] ${pkg}`)
+            try { await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg) }
+            catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
+          }
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'killApp': {
+          const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
+          if (pkg) {
+            try { await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg) }
+            catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
+          }
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'restartApp': {
+          const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
+          if (pkg) {
+            try {
+              await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
+              await new Promise<void>((r) => setTimeout(r, 1000))
+              await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
+            } catch (e) {
+              emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`)
+            }
+          }
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'appRunning': {
+          const pkg = resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables) as string
+          const running = pkg ? await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg) : false
+          ctx.outputs[innerNode.id] = { running }
+          nodeId = this.followEdge(innerNode.id, running ? 'true' : 'false', fragAdj)
+          break
+        }
+
+        case 'dice': {
+          const value = Math.floor(Math.random() * 6) + 1
+          emit('info', `[${nodeLabel(innerNode)}] ${value}`)
+          ctx.outputs[innerNode.id] = { value }
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        case 'log': {
+          const msg = String(resolveValue(innerNode.config.message, ctx.outputs, ctx.variables) ?? '')
+          emit('info', `[${nodeLabel(innerNode)}] ${msg}`)
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+        }
+
+        default:
+          nodeId = this.followEdge(innerNode.id, undefined, fragAdj)
+          break
+      }
+    }
+
+    // 片段自然终止（无边可走），从变量中提取输出值
+    for (const param of frag.outputs) {
+      if (param.name in ctx.variables) {
+        fragmentOutputs[param.name] = ctx.variables[param.name]
+      }
+    }
+    ctx.outputs = savedOutputs
+    ctx.variables = savedVars
+    ctx.outputs[callNode.id] = fragmentOutputs
+    return { steps }
   }
 
   /** 识图节点 */

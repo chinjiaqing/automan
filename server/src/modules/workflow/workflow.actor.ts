@@ -11,6 +11,8 @@ import { eventBus, EventBusEvent } from '../../core/event-bus.js'
 import type { ScreenshotEvent } from './screenshot.dispatcher.js'
 import type { VisualAnnotation } from '@automan/shared/types.js'
 import type { DeviceSession } from './device.session.js'
+import { db, fragments } from '../../db/index.js'
+import { eq } from 'drizzle-orm'
 
 /** WorkflowActor 配置 */
 export interface WorkflowActorConfig {
@@ -175,6 +177,16 @@ export class WorkflowActor extends ActorBase {
         screenshotWidth: event.width,
         screenshotHeight: event.height,
         shouldCancel: () => this.cancelled,
+        fragmentLoader: async (fragmentId: string) => {
+          const row = db.select().from(fragments).where(eq(fragments.id, fragmentId)).get()
+          if (!row) return null
+          return {
+            nodes: JSON.parse(row.nodesJson),
+            edges: JSON.parse(row.edgesJson),
+            inputs: JSON.parse(row.inputsJson),
+            outputs: JSON.parse(row.outputsJson),
+          }
+        },
       }
 
       const result = await this.engine.execute(this.config.workflow, ctx, (level, msg) => {

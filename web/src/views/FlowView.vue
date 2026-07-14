@@ -28,7 +28,7 @@
     <!-- 中间区域：有选中时显示画布，无选中时显示占位 -->
     <template v-if="currentWorkflowId">
       <!-- 节点面板 -->
-      <NodePalette />
+      <NodePalette :exclude-types="['return']" />
 
       <!-- 画布 -->
       <div class="flow-canvas" @drop="onDrop" @dragover.prevent>
@@ -81,6 +81,7 @@
         :config="selectedNode.config as Record<string, unknown>"
         :upstream-nodes="upstreamNodes"
         :data-nodes="dataNodes"
+        :fragments="fragmentList"
         @update:config="onConfigUpdate"
         @update:label="onLabelUpdate"
       />
@@ -172,13 +173,15 @@ import ActionNode from '../components/flow/nodes/ActionNode.vue'
 import DataNode from '../components/flow/nodes/DataNode.vue'
 
 import { workflowApi } from '../api/workflow.js'
+import { fragmentApi } from '../api/fragment.js'
 import { getNodeTypeDef } from '../flow/nodeTypes.js'
-import type { Workflow, WorkflowNode as WfNode } from '@automan/shared/types.js'
+import type { Workflow, WorkflowNode as WfNode, Fragment } from '@automan/shared/types.js'
 
 // ── 状态 ─────────────────────────────────
 const nodes = ref<any[]>([])
 const edges = ref<any[]>([])
 const workflowList = ref<Workflow[]>([])
+const fragmentList = ref<Fragment[]>([])
 
 // ── Vue Flow 实例 ────────────────────────────────
 const { addNodes, addEdges, project, fitView } = useVueFlow()
@@ -206,6 +209,8 @@ const nodeTypes: Record<string, any> = {
   restartApp: markRaw(ActionNode),
   appRunning: markRaw(ConditionNode),
   log: markRaw(ActionNode),
+  call: markRaw(ActionNode),
+  return: markRaw(EndNode),
 }
 
 const defaultEdgeOpts = {
@@ -265,8 +270,13 @@ const dataNodes = computed(() => {
 
 // ── 生命周期 ──────────────────────────────────────
 onMounted(async () => {
-  await loadWorkflowList()
+  await Promise.all([loadWorkflowList(), loadFragments()])
 })
+
+async function loadFragments() {
+  const res = await fragmentApi.list()
+  if (res.success) fragmentList.value = res.data
+}
 
 // ── 方法 ─────────────────────────────────────────
 

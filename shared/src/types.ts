@@ -706,6 +706,83 @@ export interface BatchRunWorkflowResponse {
 }
 
 // ─────────────────────────────────────────
+// 片段（Fragment）
+// ─────────────────────────────────────────
+
+/** 片段参数定义 */
+export interface FragmentParam {
+  name: string
+  type: 'number' | 'string'
+  defaultValue?: string
+  /** 中文标签 */
+  label?: string
+}
+
+/** 片段 */
+export interface Fragment {
+  id: string
+  name: string
+  description: string
+  groupId: string
+  inputs: FragmentParam[]
+  outputs: FragmentParam[]
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** 片段分组 */
+export interface FragmentGroup {
+  id: string
+  name: string
+  sort: number
+}
+
+/** 创建片段请求 */
+export interface CreateFragmentRequest {
+  name: string
+  description?: string
+  groupId?: string
+  inputs?: FragmentParam[]
+  outputs?: FragmentParam[]
+}
+
+/** 保存片段请求 */
+export interface SaveFragmentRequest {
+  name?: string
+  description?: string
+  groupId?: string
+  inputs?: FragmentParam[]
+  outputs?: FragmentParam[]
+  nodes?: WorkflowNode[]
+  edges?: WorkflowEdge[]
+}
+
+/** 创建片段分组请求 */
+export interface CreateFragmentGroupRequest {
+  name: string
+  sort?: number
+}
+
+/** 更新片段分组请求 */
+export interface UpdateFragmentGroupRequest {
+  id: string
+  name?: string
+  sort?: number
+}
+
+/** 片段目录条目（AI 提示词注入用，精简版） */
+export interface FragmentCatalogEntry {
+  id: string
+  name: string
+  description: string
+  group: string
+  inputs: FragmentParam[]
+  outputs: FragmentParam[]
+}
+
+// ─────────────────────────────────────────
 // 设备工作流勾选快照
 // ─────────────────────────────────────────
 

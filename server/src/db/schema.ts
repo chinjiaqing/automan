@@ -77,3 +77,36 @@ export const workflowRunConfigs = sqliteTable(
 export type WorkflowRunConfigRow = typeof workflowRunConfigs.$inferSelect
 export type NewWorkflowRunConfigRow = typeof workflowRunConfigs.$inferInsert
 
+// ── fragment_groups 表（片段分组）─────
+export const fragmentGroups = sqliteTable(
+  'fragment_groups',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    sort: integer('sort').notNull().default(0),
+  },
+)
+
+export type FragmentGroupRow = typeof fragmentGroups.$inferSelect
+export type NewFragmentGroupRow = typeof fragmentGroups.$inferInsert
+
+// ── fragments 表（可复用逻辑片段）─────
+export const fragments = sqliteTable(
+  'fragments',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    groupId: text('group_id').notNull().default(''),
+    inputsJson: text('inputs_json').notNull().default('[]'),
+    outputsJson: text('outputs_json').notNull().default('[]'),
+    nodesJson: text('nodes_json').notNull().default('[]'),
+    edgesJson: text('edges_json').notNull().default('[]'),
+    createdAt: integer('created_at', { mode: 'number' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  },
+)
+
+export type FragmentRow = typeof fragments.$inferSelect
+export type NewFragmentRow = typeof fragments.$inferInsert
+

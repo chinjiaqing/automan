@@ -1,3 +1,15 @@
+feat(fragment): 实现片段系统 — 可复用工作流子流程
+
+- 新增片段数据模型：FragmentParam / Fragment 类型，fragments/fragment_groups 表
+- 新增片段 CRUD API（fragment.routes.ts）
+- 新增 FragmentIOEditor：左右两栏 IO 编辑器，随机变量名，label 默认值
+- 新增 FragmentView：四栏布局（分组/片段列表/画布/配置面板）
+- 实现"声明即变量"模式：output 声明注入 ctx.variables，结束时自动提取
+- 引擎 execCall：变量隔离 + output 默认值注入 + 自然结束提取输出值
+- 片段内 scope 强制 local，移除 end/return 节点
+- DataSourceSelect 重构：Teleport 下拉 + 分组展示（入参/出参/变量）
+- AppHeader 片段导航增加 BETA 标识
+- 完善产品核心文档、开发前必读规范、工作日志
 feat(swipe): 拟真滑动全链路实现 + 变量节点 init action
 
 核心能力:

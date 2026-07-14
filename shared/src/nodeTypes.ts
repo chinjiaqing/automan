@@ -367,6 +367,34 @@ export const debugNodeTypes: NodeTypeDefinition[] = [
   },
 ]
 
+// ── 片段节点 ────────────────────────────────
+export const fragmentNodeTypes: NodeTypeDefinition[] = [
+  {
+    type: 'call',
+    category: 'flow',
+    label: '调用片段',
+    icon: 'pi-code',
+    description: '调用一个已定义的片段（函数），支持传参和接收返回值',
+    configSchema: [
+      { key: 'fragmentId', label: '片段', type: 'select', options: [] },
+    ],
+    outputs: [], // 动态：由选中片段决定
+    inputs: [],
+    exitCount: 1,
+  },
+  {
+    type: 'return',
+    category: 'flow',
+    label: '返回',
+    icon: 'pi-undo',
+    description: '片段返回节点，将值输出给调用方，执行后退出片段',
+    configSchema: [], // 动态：由片段的 outputs 决定
+    outputs: [],
+    inputs: [],
+    exitCount: 0,
+  },
+]
+
 // ── 合并所有类型 ────────────────────────────────
 export const allNodeTypes: NodeTypeDefinition[] = [
   ...flowNodeTypes,
@@ -374,6 +402,7 @@ export const allNodeTypes: NodeTypeDefinition[] = [
   ...dataNodeTypes,
   ...appNodeTypes,
   ...debugNodeTypes,
+  ...fragmentNodeTypes,
 ]
 
 /** 按 type 查找节点定义 */
@@ -389,5 +418,6 @@ export function getNodeTypesByCategory(): Record<string, NodeTypeDefinition[]> {
     data: dataNodeTypes,
     app: appNodeTypes,
     debug: debugNodeTypes,
+    fragment: fragmentNodeTypes,
   }
 }

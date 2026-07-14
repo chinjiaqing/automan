@@ -31,6 +31,7 @@ import { taskRoutes } from './routes/task.routes.js'
 import { filesystemRoutes } from './routes/filesystem.routes.js'
 import { workflowRoutes } from './routes/workflow.routes.js'
 import { aiRoutes } from './routes/ai.routes.js'
+import { fragmentRoutes } from './routes/fragment.routes.js'
 
 export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -158,6 +159,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await filesystemRoutes(app)
   await workflowRoutes(app, workflowService)
   await aiRoutes(app)
+  await fragmentRoutes(app)
 
   // ── 7. 静态文件托管（生产模式）────────────
   if (isProduction) {
