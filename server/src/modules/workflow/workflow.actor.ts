@@ -279,18 +279,18 @@ export class WorkflowActor extends ActorBase {
       if (scope === 'session') {
         // session 变量：已有上次值则保留，否则用默认值初始化
         if (!(varName in vars)) {
-          vars[varName] = value !== undefined ? Number(value) || 0 : 0
+          vars[varName] = value !== undefined && value !== '' ? value : 0
         }
       } else if (scope === 'input') {
         // input 变量：优先使用外部输入值，否则用默认值
         if (varName in inputValues) {
           vars[varName] = inputValues[varName]
         } else {
-          vars[varName] = value !== undefined ? Number(value) || 0 : 0
+          vars[varName] = value !== undefined && value !== '' ? value : 0
         }
       } else {
         // local 变量：每次重置为默认值
-        vars[varName] = value !== undefined ? Number(value) || 0 : 0
+        vars[varName] = value !== undefined && value !== '' ? value : 0
       }
     }
 

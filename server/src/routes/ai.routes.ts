@@ -101,7 +101,7 @@ ${flowJson}
 4. 所有节点通过 edges 连接，形成完整流程
 5. config 中的参数使用默认值或用户提供的值；用户未提供且无法推断的必填参数用 "TODO_参数名" 占位
 6. 如果用户要求修改已有工作流，基于当前画布数据修改后输出完整的新 JSON
-7. 变量引用语法：{{nodeId.outputKey}}，例如 {{findPic_1.matchX}}
+7. 变量引用语法：{{nodeId.outputKey}}，例如 {{findPic_1.matchX}}。引用变量时一律使用 {{scope.varName}} 形式（如 {{session.detectCount}}、{{input.packageName}}），严禁直接写 scope.varName（如 session.detectCount）而不加花括号，否则引擎无法解析
 8. variable 节点的 action=createOrSet 表示"创建或赋值"（变量不存在时初始化，已存在则保留），set 表示无条件赋值
 9. loop 节点的 body 链最后一个节点不需要连回 loop，引擎会自动返回条件判断
 

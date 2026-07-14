@@ -100,6 +100,13 @@ export function resolveValue(
     return variables?.[varName] ?? value
   }
 
+  // {{scope.name}} 引用（如 {{session.detectCount}}）→ 变量池按 name 查找
+  const scopeRefMatch = /^\{\{(session|local|input|global)\.([^{}]+)\}\}$/.exec(value)
+  if (scopeRefMatch) {
+    const varName = scopeRefMatch[2]
+    return variables?.[varName] ?? value
+  }
+
   // 完整引用 {{nodeId.key}} → 返回原始类型（不做算术）
   const fullMatch = /^\{\{([^{}.]+)\.([^{}.]+)\}\}$/.exec(value)
   if (fullMatch) {

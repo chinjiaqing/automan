@@ -251,7 +251,7 @@ export class WorkflowEngine {
           }
 
           case 'launchApp': {
-            const pkg = cleanPkgName(node.config.packageName)
+            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
             if (!pkg) throw new Error('启动应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -264,7 +264,7 @@ export class WorkflowEngine {
           }
 
           case 'killApp': {
-            const pkg = cleanPkgName(node.config.packageName)
+            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
             if (!pkg) throw new Error('关闭应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -277,7 +277,7 @@ export class WorkflowEngine {
           }
 
           case 'restartApp': {
-            const pkg = cleanPkgName(node.config.packageName)
+            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
             if (!pkg) throw new Error('重启应用节点缺少包名')
             emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
@@ -292,7 +292,7 @@ export class WorkflowEngine {
           }
 
           case 'appRunning': {
-            const pkg = cleanPkgName(node.config.packageName)
+            const pkg = cleanPkgName(resolveValue(node.config.packageName, ctx.outputs, ctx.variables))
             if (!pkg) throw new Error('应用状态节点缺少包名')
             const running = await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg)
             emit('info', `[${nodeLabel(node)}] ${running}`)
@@ -351,34 +351,37 @@ export class WorkflowEngine {
     const varName = String(name ?? '')
     if (!varName) return
 
-    // 变量初始化由 initVariables() 统一处理，这里只执行操作
-    const current = Number(ctx.variables[varName]) || 0
-    let result: number
+    // 读取当前值（保留原类型，可能是字符串包名等）
+    const current = ctx.variables[varName]
+    // 算术操作专用：解析后强制转数字
+    const toNum = (v: unknown): number => Number(resolveValue(v, ctx.outputs, ctx.variables)) || 0
+
+    let result: unknown
 
     switch (action) {
       case 'createOrSet':
-        // 变量不存在时初始化，已存在则保留当前值
+        // 已存在则保留当前值（不再强制转数字，字符串包名等原样保留）
         if (varName in ctx.variables) {
           result = current
         } else {
-          result = Number(resolveValue(value, ctx.outputs, ctx.variables)) || 0
+          result = resolveValue(value, ctx.outputs, ctx.variables)
         }
         break
       case 'set':
-        result = Number(resolveValue(value, ctx.outputs, ctx.variables)) || 0
+        result = resolveValue(value, ctx.outputs, ctx.variables)
         break
       case 'add':
-        result = current + (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 0)
+        result = (Number(current) || 0) + toNum(operand)
         break
       case 'sub':
-        result = current - (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 0)
+        result = (Number(current) || 0) - toNum(operand)
         break
       case 'mul':
-        result = current * (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 1)
+        result = (Number(current) || 0) * (toNum(operand) || 1)
         break
       case 'div': {
-        const d = Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 1
-        result = d === 0 ? 0 : current / d
+        const d = toNum(operand) || 1
+        result = d === 0 ? 0 : (Number(current) || 0) / d
         break
       }
       default:
@@ -492,7 +495,7 @@ export class WorkflowEngine {
             break
           }
           case 'launchApp': {
-            const pkg = cleanPkgName(innerNode.config.packageName)
+            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
             if (pkg) {
               emit('info', `[${nodeLabel(innerNode)}] ${pkg}`)
               try { await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg) }
@@ -502,7 +505,7 @@ export class WorkflowEngine {
             break
           }
           case 'killApp': {
-            const pkg = cleanPkgName(innerNode.config.packageName)
+            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
             if (pkg) {
               try { await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg) }
               catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
@@ -511,7 +514,7 @@ export class WorkflowEngine {
             break
           }
           case 'restartApp': {
-            const pkg = cleanPkgName(innerNode.config.packageName)
+            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
             if (pkg) {
               try {
                 await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
@@ -525,7 +528,7 @@ export class WorkflowEngine {
             break
           }
           case 'appRunning': {
-            const pkg = cleanPkgName(innerNode.config.packageName)
+            const pkg = cleanPkgName(resolveValue(innerNode.config.packageName, ctx.outputs, ctx.variables))
             const running = pkg ? await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg) : false
             ctx.outputs[innerNode.id] = { running }
             nodeId = this.followEdge(innerNode.id, running ? 'true' : 'false', adj)
