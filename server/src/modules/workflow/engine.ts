@@ -26,6 +26,11 @@ function parsePngSizeFromDataUrl(dataUrl: string): { width: number; height: numb
   return { width: 0, height: 0 }
 }
 
+/** 获取节点显示名称（label 优先，否则 type） */
+function nodeLabel(node: WorkflowNode): string {
+  return node.label || node.type
+}
+
 /** 原始视觉注解（引擎层，不含工作流信息） */
 export interface RawAnnotation {
   type: 'bbox' | 'click' | 'area' | 'text' | 'swipe'
@@ -157,7 +162,6 @@ export class WorkflowEngine {
       const node = nodeMap.get(currentNodeId)
       if (!node) break
 
-      emit('debug', `▶ ${node.type} [${node.id}]`)
       steps++
 
       try {
@@ -183,7 +187,7 @@ export class WorkflowEngine {
           case 'condition': {
             const result = this.evalCondition(node, ctx)
             ctx.outputs[node.id] = { result }
-            emit('debug', `条件: ${result}`)
+            emit('info', `[${nodeLabel(node)}] ${result}`)
             currentNodeId = this.followEdge(node.id, result ? 'true' : 'false', adj)
             break
           }
@@ -196,17 +200,17 @@ export class WorkflowEngine {
           }
 
           case 'findPic':
-            await this.execFindPic(node, ctx)
+            await this.execFindPic(node, ctx, emit)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
           case 'ocrWords':
-            await this.execOcrWords(node, ctx)
+            await this.execOcrWords(node, ctx, emit)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
           case 'ocrFindStr':
-            await this.execOcrFindStr(node, ctx)
+            await this.execOcrFindStr(node, ctx, emit)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
 
@@ -227,7 +231,7 @@ export class WorkflowEngine {
 
           case 'delay': {
             const ms = Number(node.config.ms ?? 1000)
-            emit('debug', `等待 ${ms}ms`)
+            emit('info', `[${nodeLabel(node)}] ${ms}ms`)
             await new Promise<void>((r) => setTimeout(r, ms))
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -240,7 +244,7 @@ export class WorkflowEngine {
             const right = Math.max(left, rawRight)
             const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
             ctx.outputs[node.id] = { actualMs }
-            emit('info', `随机等待 ${actualMs}ms (范围 ${left}~${right})`)
+            emit('info', `[${nodeLabel(node)}] ${actualMs}ms`)
             await new Promise<void>((r) => setTimeout(r, actualMs))
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -249,11 +253,11 @@ export class WorkflowEngine {
           case 'launchApp': {
             const pkg = cleanPkgName(node.config.packageName)
             if (!pkg) throw new Error('启动应用节点缺少包名')
-            emit('info', `启动应用: ${pkg}`)
+            emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
               await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
             } catch (e) {
-              emit('warn', `启动应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+              emit('warn', `[${nodeLabel(node)}] 失败: ${e instanceof Error ? e.message : String(e)}`)
             }
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -262,11 +266,11 @@ export class WorkflowEngine {
           case 'killApp': {
             const pkg = cleanPkgName(node.config.packageName)
             if (!pkg) throw new Error('关闭应用节点缺少包名')
-            emit('info', `关闭应用: ${pkg}`)
+            emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
               await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
             } catch (e) {
-              emit('warn', `关闭应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+              emit('warn', `[${nodeLabel(node)}] 失败: ${e instanceof Error ? e.message : String(e)}`)
             }
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -275,13 +279,13 @@ export class WorkflowEngine {
           case 'restartApp': {
             const pkg = cleanPkgName(node.config.packageName)
             if (!pkg) throw new Error('重启应用节点缺少包名')
-            emit('info', `重启应用: ${pkg}`)
+            emit('info', `[${nodeLabel(node)}] ${pkg}`)
             try {
               await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg)
               await new Promise<void>((r) => setTimeout(r, 1000))
               await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
             } catch (e) {
-              emit('warn', `重启应用失败: ${e instanceof Error ? e.message : String(e)}，继续执行`)
+              emit('warn', `[${nodeLabel(node)}] 失败: ${e instanceof Error ? e.message : String(e)}`)
             }
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -291,7 +295,7 @@ export class WorkflowEngine {
             const pkg = cleanPkgName(node.config.packageName)
             if (!pkg) throw new Error('应用状态节点缺少包名')
             const running = await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg)
-            emit('info', `${pkg} 运行中: ${running}`)
+            emit('info', `[${nodeLabel(node)}] ${running}`)
             ctx.outputs[node.id] = { running }
             currentNodeId = this.followEdge(node.id, running ? 'true' : 'false', adj)
             break
@@ -304,7 +308,7 @@ export class WorkflowEngine {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        emit('error', `节点 ${node.type}[${node.id}] 执行失败: ${msg}`)
+        emit('error', `[${nodeLabel(node)}] 失败: ${msg}`)
         return { success: false, variables: ctx.variables, outputSummary: ctx.outputs, error: msg, stepsExecuted: steps }
       }
     }
@@ -407,7 +411,7 @@ export class WorkflowEngine {
         return { nextNodeId: this.followEdge(loopNode.id, 'exit', adj), steps }
       }
 
-      emit('debug', `loop #${iter + 1}`)
+      emit('info', `[${nodeLabel(loopNode)}] #${iter + 1}`)
       iter++
       steps++
 
@@ -422,7 +426,6 @@ export class WorkflowEngine {
         const innerNode = nodeMap.get(nodeId)
         if (!innerNode) break
 
-        emit('debug', `  loop▶ ${innerNode.type} [${innerNode.id}]`)
         steps++
 
         switch (innerNode.type) {
@@ -433,19 +436,20 @@ export class WorkflowEngine {
           case 'condition': {
             const r = this.evalCondition(innerNode, ctx)
             ctx.outputs[innerNode.id] = { result: r }
+            emit('info', `[${nodeLabel(innerNode)}] ${r}`)
             nodeId = this.followEdge(innerNode.id, r ? 'true' : 'false', adj)
             break
           }
           case 'findPic':
-            await this.execFindPic(innerNode, ctx)
+            await this.execFindPic(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'ocrWords':
-            await this.execOcrWords(innerNode, ctx)
+            await this.execOcrWords(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'ocrFindStr':
-            await this.execOcrFindStr(innerNode, ctx)
+            await this.execOcrFindStr(innerNode, ctx, emit)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           case 'click':
@@ -462,6 +466,7 @@ export class WorkflowEngine {
             break
           case 'delay': {
             const ms = Number(innerNode.config.ms ?? 1000)
+            emit('info', `[${nodeLabel(innerNode)}] ${ms}ms`)
             await new Promise<void>((r) => setTimeout(r, ms))
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
@@ -473,7 +478,7 @@ export class WorkflowEngine {
             const right = Math.max(left, rawRight)
             const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
             ctx.outputs[innerNode.id] = { actualMs }
-            emit('debug', `  loop▶ 随机等待 ${actualMs}ms (范围 ${left}~${right})`)
+            emit('info', `[${nodeLabel(innerNode)}] ${actualMs}ms`)
             await new Promise<void>((r) => setTimeout(r, actualMs))
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
@@ -481,9 +486,9 @@ export class WorkflowEngine {
           case 'launchApp': {
             const pkg = cleanPkgName(innerNode.config.packageName)
             if (pkg) {
-              emit('info', `loop 内启动应用: ${pkg}`)
+              emit('info', `[${nodeLabel(innerNode)}] ${pkg}`)
               try { await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg) }
-              catch (e) { emit('warn', `loop 内启动应用失败: ${e instanceof Error ? e.message : String(e)}`) }
+              catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
             }
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
@@ -492,7 +497,7 @@ export class WorkflowEngine {
             const pkg = cleanPkgName(innerNode.config.packageName)
             if (pkg) {
               try { await adbKillApp(ctx.adbPath, ctx.adbTarget, pkg) }
-              catch (e) { emit('warn', `loop 内关闭应用失败: ${e instanceof Error ? e.message : String(e)}`) }
+              catch (e) { emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`) }
             }
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
@@ -505,7 +510,7 @@ export class WorkflowEngine {
                 await new Promise<void>((r) => setTimeout(r, 1000))
                 await adbLaunchApp(ctx.adbPath, ctx.adbTarget, pkg)
               } catch (e) {
-                emit('warn', `loop 内重启应用失败: ${e instanceof Error ? e.message : String(e)}`)
+                emit('warn', `[${nodeLabel(innerNode)}] 失败: ${e instanceof Error ? e.message : String(e)}`)
               }
             }
             nodeId = this.followEdge(innerNode.id, undefined, adj)
@@ -537,7 +542,7 @@ export class WorkflowEngine {
   }
 
   /** 识图节点 */
-  private async execFindPic(node: WorkflowNode, ctx: EngineContext): Promise<void> {
+  private async execFindPic(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
     const { templateImage, threshold, region } = node.config as Record<string, unknown>
     if (!templateImage) throw new Error('识图节点缺少模板图片')
 
@@ -565,6 +570,7 @@ export class WorkflowEngine {
       matchX: first ? Math.round(first.x) : -1,
       matchY: first ? Math.round(first.y) : -1,
     }
+    emit('info', `[${nodeLabel(node)}] ${result.matches.length}个匹配${first ? ` (${Math.round(first.x)},${Math.round(first.y)})` : ''}`)
     // 视觉注解：所有匹配点（已是标准分辨率），携带模板尺寸
     if (result.matches.length > 0) {
       ctx.annotations.push({
@@ -585,7 +591,7 @@ export class WorkflowEngine {
   }
 
   /** OCR 识字节点 */
-  private async execOcrWords(node: WorkflowNode, ctx: EngineContext): Promise<void> {
+  private async execOcrWords(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
     const { region } = node.config as Record<string, unknown>
     const searchRegion = clampRegion(
       resolveRegion(region, ctx.outputs),
@@ -598,10 +604,11 @@ export class WorkflowEngine {
     })
     const text = result.words.map((w) => w.text).join('')
     ctx.outputs[node.id] = { text, wordCount: result.words.length }
+    emit('info', `[${nodeLabel(node)}] ${result.words.length}字`)
   }
 
   /** OCR 找字节点 */
-  private async execOcrFindStr(node: WorkflowNode, ctx: EngineContext): Promise<void> {
+  private async execOcrFindStr(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
     const { target, similarity, region } = node.config as Record<string, unknown>
     if (!target) throw new Error('找字节点缺少目标文字')
 
@@ -625,6 +632,7 @@ export class WorkflowEngine {
       matchX: first ? Math.round(first.x) : -1,
       matchY: first ? Math.round(first.y) : -1,
     }
+    emit('info', `[${nodeLabel(node)}] ${result.matches.length}个匹配${first ? ` "${first.text}"` : ''}`)
     // 视觉注解：匹配到的文字区域（已是标准分辨率）
     if (result.matches.length > 0) {
       ctx.annotations.push({
@@ -651,7 +659,7 @@ export class WorkflowEngine {
     const rawY = Number(resolveValue(node.config.y, ctx.outputs) ?? 0)
     const [x, y] = clampPoint(rawX, rawY, ctx.screenshotWidth, ctx.screenshotHeight)
     const [actualX, actualY] = toActualPoint(x, y, ctx.scaleFactor)
-    emit('info', `点击: 标准(${x},${y}) → 实际(${actualX},${actualY})`)
+    emit('info', `[${nodeLabel(node)}] ${actualX},${actualY}`)
     await adbClick(ctx.adbPath, ctx.adbTarget, [actualX, actualY])
     ctx.annotations.push({
       type: 'click',
@@ -666,10 +674,10 @@ export class WorkflowEngine {
     const rawRegion = resolveRegion(node.config.region, ctx.outputs)
     const region = clampRegion(rawRegion, ctx.screenshotWidth, ctx.screenshotHeight)
     const actualRegion = toActualRegion(region, ctx.scaleFactor)
-    emit('info', `范围点击: 标准[${rawRegion}] → clamp[${region}] → 实际[${actualRegion}] (截图${ctx.screenshotWidth}x${ctx.screenshotHeight})`)
-    await adbAreaClick(ctx.adbPath, ctx.adbTarget, actualRegion)
     const cx = Math.round((region[0] + region[2]) / 2)
     const cy = Math.round((region[1] + region[3]) / 2)
+    emit('info', `[${nodeLabel(node)}] ${cx},${cy}`)
+    await adbAreaClick(ctx.adbPath, ctx.adbTarget, actualRegion)
     ctx.annotations.push({
       type: 'area',
       nodeId: node.id,
@@ -704,7 +712,7 @@ export class WorkflowEngine {
       steps: result.steps,
     }
 
-    emit('info', `滑动 (${result.startX},${result.startY}) → (${result.endX},${result.endY}) ${result.steps}段 ${result.elapsed}ms`)
+    emit('info', `[${nodeLabel(node)}] (${result.startX},${result.startY})→(${result.endX},${result.endY})`)
 
     // 视觉注解：滑动轨迹
     ctx.annotations.push({

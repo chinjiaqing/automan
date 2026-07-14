@@ -73,8 +73,8 @@ export class WorkflowActor extends ActorBase {
     await super.stop()
   }
 
-  async receive(msg: unknown): Promise<void> {
-    this.sendLog('debug', `received: ${JSON.stringify(msg)}`)
+  async receive(_msg: unknown): Promise<void> {
+    // 消息已由 ActorManager 分发
   }
 
   /** 获取运行信息 */
@@ -109,7 +109,7 @@ export class WorkflowActor extends ActorBase {
       return
     }
     if (this.flowState !== 'idle') {
-      this.sendLog('debug', `markPending ignored: flowState=${this.flowState}`)
+      // flowState 冲突时跳过
       return
     }
     this.flowState = 'pending'
@@ -125,7 +125,7 @@ export class WorkflowActor extends ActorBase {
     // 达标或已取消：不处理截图
     if (this.flowState === 'completed' || this.cancelled) return
     if (this.busy) {
-      this.sendLog('debug', `busy, skip screenshot handle #${this.executionCount + 1}`)
+      // 忙时跳过截图
       return
     }
 

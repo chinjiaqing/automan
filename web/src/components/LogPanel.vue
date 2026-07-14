@@ -165,9 +165,4 @@ watch(
   color: #d97706;
   background: #fef3c7;
 }
-
-.log-tag--debug {
-  color: #6b7280;
-  background: #f3f4f6;
-}
 </style>

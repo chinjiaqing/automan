@@ -30,7 +30,6 @@ export class TaskActor extends ActorBase {
 
   async receive(msg: unknown): Promise<void> {
     logger.debug(this.module, `actor ${this.id} received:`, msg)
-    this.sendLog('debug', `received message: ${JSON.stringify(msg)}`)
   }
 
   /** 获取任务配置 */
@@ -49,7 +48,7 @@ export class TaskActor extends ActorBase {
       let tick = 0
       while (this.isRunning()) {
         tick++
-        this.sendLog('debug', `tick #${tick} — task running`)
+        this.sendLog('info', `tick #${tick}`)
         await sleep(1000)
       }
       this.sendLog('info', `task completed after ${tick} ticks`)

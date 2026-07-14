@@ -137,8 +137,8 @@ function appendLog(level: LogEntry['level'], message: string) {
   const now = new Date()
   const time = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
   logs.value.push({ time, level, message })
-  if (logs.value.length > 500) {
-    logs.value = logs.value.slice(-500)
+  if (logs.value.length > 200) {
+    logs.value = logs.value.slice(-200)
   }
 }
 
