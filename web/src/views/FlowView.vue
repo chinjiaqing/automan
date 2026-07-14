@@ -149,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, markRaw, onMounted } from 'vue'
+import { ref, computed, markRaw, onMounted, nextTick } from 'vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -175,8 +175,13 @@ import { workflowApi } from '../api/workflow.js'
 import { getNodeTypeDef } from '../flow/nodeTypes.js'
 import type { Workflow, WorkflowNode as WfNode } from '@automan/shared/types.js'
 
+// ── 状态 ─────────────────────────────────
+const nodes = ref<any[]>([])
+const edges = ref<any[]>([])
+const workflowList = ref<Workflow[]>([])
+
 // ── Vue Flow 实例 ────────────────────────────────
-const { addNodes, addEdges, project } = useVueFlow()
+const { addNodes, addEdges, project, fitView } = useVueFlow()
 
 // ── 自定义节点类型映射 ──────────────────────────
 const nodeTypes: Record<string, any> = {
@@ -191,13 +196,16 @@ const nodeTypes: Record<string, any> = {
   ocrFindStr: markRaw(ActionNode),
   click: markRaw(ActionNode),
   areaClick: markRaw(ActionNode),
+  swipe: markRaw(ActionNode),
   delay: markRaw(ActionNode),
   randomDelay: markRaw(ActionNode),
   variable: markRaw(DataNode),
+  dice: markRaw(DataNode),
   launchApp: markRaw(ActionNode),
   killApp: markRaw(ActionNode),
   restartApp: markRaw(ActionNode),
   appRunning: markRaw(ConditionNode),
+  log: markRaw(ActionNode),
 }
 
 const defaultEdgeOpts = {
@@ -206,9 +214,6 @@ const defaultEdgeOpts = {
 }
 
 // ── 状态 ─────────────────────────────────────────
-const nodes = ref<any[]>([])
-const edges = ref<any[]>([])
-const workflowList = ref<Workflow[]>([])
 const currentWorkflowId = ref('')
 const currentWorkflowName = ref('')
 const hasChanges = ref(false)
@@ -287,6 +292,9 @@ async function loadWorkflow(id: string) {
   }))
   hasChanges.value = false
   selectedNode.value = null
+
+  // 节点加载后自适应视图
+  nextTick(() => fitView({ padding: 0.2 }))
 }
 
 function toFlowNode(n: WfNode): any {
@@ -303,7 +311,7 @@ function toFlowNode(n: WfNode): any {
       selected: false,
     },
     deletable: n.type !== 'start',
-    draggable: true,
+    draggable: n.type !== 'start',
   }
 }
 

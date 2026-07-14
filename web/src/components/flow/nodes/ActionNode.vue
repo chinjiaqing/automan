@@ -43,11 +43,13 @@ const iconBg = computed(() => {
     ocrFindStr: 'bg-indigo-500',
     click: 'bg-pink-500',
     areaClick: 'bg-rose-500',
+    swipe: 'bg-sky-500',
     delay: 'bg-gray-500',
     screenshot: 'bg-teal-500',
     launchApp: 'bg-green-500',
     killApp: 'bg-red-500',
     restartApp: 'bg-orange-500',
+    log: 'bg-gray-600',
   }
   return map[props.data.type] ?? 'bg-blue-500'
 })

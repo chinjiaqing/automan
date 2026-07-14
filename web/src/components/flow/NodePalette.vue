@@ -33,6 +33,7 @@ const categoryLabels: Record<string, string> = {
   action: '动作',
   data: '数据',
   app: '应用',
+  debug: '调试',
 }
 
 function onDragStart(event: DragEvent, nodeDef: NodeTypeDefinition) {

@@ -301,6 +301,21 @@ export class WorkflowEngine {
             break
           }
 
+          case 'dice': {
+            const value = Math.floor(Math.random() * 6) + 1
+            emit('info', `[${nodeLabel(node)}] ${value}`)
+            ctx.outputs[node.id] = { value }
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
+          case 'log': {
+            const msg = String(resolveValue(node.config.message, ctx.outputs) ?? '')
+            emit('info', `[${nodeLabel(node)}] ${msg}`)
+            currentNodeId = this.followEdge(node.id, undefined, adj)
+            break
+          }
+
           default:
             emit('warn', `未知节点类型: ${node.type}`)
             currentNodeId = this.followEdge(node.id, undefined, adj)
@@ -521,6 +536,19 @@ export class WorkflowEngine {
             const running = pkg ? await adbIsAppRunning(ctx.adbPath, ctx.adbTarget, pkg) : false
             ctx.outputs[innerNode.id] = { running }
             nodeId = this.followEdge(innerNode.id, running ? 'true' : 'false', adj)
+            break
+          }
+          case 'dice': {
+            const value = Math.floor(Math.random() * 6) + 1
+            emit('info', `[${nodeLabel(innerNode)}] ${value}`)
+            ctx.outputs[innerNode.id] = { value }
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
+            break
+          }
+          case 'log': {
+            const msg = String(resolveValue(innerNode.config.message, ctx.outputs) ?? '')
+            emit('info', `[${nodeLabel(innerNode)}] ${msg}`)
+            nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
           }
           case 'end':

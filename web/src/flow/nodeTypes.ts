@@ -173,7 +173,7 @@ export const actionNodeTypes: NodeTypeDefinition[] = [
     type: 'swipe',
     category: 'action',
     label: '滑动',
-    icon: 'pi-arrows-alt',
+    icon: 'pi-angle-double-right',
     configSchema: [
       { key: 'startRegion', label: '起点区域', type: 'coord-ref', default: '0,0,0,0' },
       { key: 'endRegion', label: '终点区域', type: 'coord-ref', default: '0,0,0,0' },
@@ -261,6 +261,16 @@ export const dataNodeTypes: NodeTypeDefinition[] = [
     inputs: [],
     exitCount: 1,
   },
+  {
+    type: 'dice',
+    category: 'data',
+    label: '骰子?',
+    icon: 'pi-sparkles',
+    configSchema: [],
+    outputs: [{ key: 'value', label: '随机1-6的正整数', dataType: 'number' }],
+    inputs: [],
+    exitCount: 1,
+  },
 ]
 
 // ── 应用节点 ────────────────────────────────────
@@ -315,12 +325,34 @@ export const appNodeTypes: NodeTypeDefinition[] = [
   },
 ]
 
+// ── 调试节点 ────────────────────────────────────
+export const debugNodeTypes: NodeTypeDefinition[] = [
+  {
+    type: 'log',
+    category: 'debug',
+    label: '日志',
+    icon: 'pi-info-circle',
+    configSchema: [
+      {
+        key: 'message',
+        label: '内容',
+        type: 'data-input',
+        placeholder: '支持引用 {{nodeId.key}}',
+      },
+    ],
+    outputs: [],
+    inputs: [],
+    exitCount: 1,
+  },
+]
+
 // ── 合并所有类型 ────────────────────────────────
 export const allNodeTypes: NodeTypeDefinition[] = [
   ...flowNodeTypes,
   ...actionNodeTypes,
   ...dataNodeTypes,
   ...appNodeTypes,
+  ...debugNodeTypes,
 ]
 
 /** 按 type 查找节点定义 */
@@ -335,5 +367,6 @@ export function getNodeTypesByCategory(): Record<string, NodeTypeDefinition[]> {
     action: actionNodeTypes,
     data: dataNodeTypes,
     app: appNodeTypes,
+    debug: debugNodeTypes,
   }
 }
