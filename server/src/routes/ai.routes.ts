@@ -1,14 +1,22 @@
 // ─────────────────────────────────────────────
 // AI 路由模块
-// 职责：LLM API 代理（流式输出），避免前端直接暴露 API Key
+// 职责：LLM API 代理（流式输出）+ 后端构建系统提示词
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
+import { allNodeTypes } from '@automan/shared/nodeTypes.js'
+import type { NodeTypeDefinition, FieldSchema } from '@automan/shared/types.js'
 
 /** LLM 消息 */
 interface LlmMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+}
+
+/** 当前画布数据 */
+interface CurrentFlow {
+  nodes: unknown[]
+  edges: unknown[]
 }
 
 /** 请求体 */
@@ -19,6 +27,90 @@ interface AiChatRequest {
     apiKey: string
     model: string
   }
+  currentFlow?: CurrentFlow
+}
+
+// ── 系统提示词构建 ──────────────────────────────
+
+function formatFieldSchema(fields: FieldSchema[]): string {
+  if (!fields.length) return '（无）'
+  return fields.map((c) => {
+    const parts = [`${c.key}: ${c.type}`]
+    if (c.label) parts.push(`label="${c.label}"`)
+    if (c.options?.length) parts.push(`options=[${c.options.join(',')}]`)
+    if (c.default !== undefined) parts.push(`default=${JSON.stringify(c.default)}`)
+    if (c.showWhen) parts.push(`showWhen=${JSON.stringify(c.showWhen)}`)
+    if (c.placeholder) parts.push(`placeholder="${c.placeholder}"`)
+    return parts.join(', ')
+  }).join('\n      ')
+}
+
+function buildSystemPrompt(currentFlow?: CurrentFlow): string {
+  const nodeDocs = allNodeTypes.map((n: NodeTypeDefinition) => {
+    const outputs = n.outputs.length
+      ? n.outputs.map((o) => `${o.key}(${o.dataType})`).join(', ')
+      : '（无）'
+    const configs = formatFieldSchema(n.configSchema)
+    const inputs = n.inputs?.length
+      ? n.inputs.map((i) => `${i.key}(${i.dataType}${i.optional ? '?' : ''})`).join(', ')
+      : '（无）'
+    return [
+      `### ${n.type}（${n.label}）`,
+      `- 分类: ${n.category}`,
+      `- 描述: ${n.description ?? '无'}`,
+      `- 输出: [${outputs}]`,
+      `- 输入: [${inputs}]`,
+      `- 出口数: ${n.exitCount}`,
+      `- 参数:`,
+      `      ${configs}`,
+    ].join('\n')
+  }).join('\n\n')
+
+  const flowJson = currentFlow
+    ? JSON.stringify(currentFlow, null, 2)
+    : '（空画布，暂无节点）'
+
+  return `你是一个专业的工作流编排助手。你可以用自然语言帮用户生成或修改自动化工作流。
+
+## 可用节点类型
+
+${nodeDocs}
+
+## 工作流 JSON 格式
+工作流由 nodes 和 edges 两个数组组成：
+- node: { id: string, type: string, label: string, position: {x, y}, config: {} }
+  - id: 全局唯一，格式为 type_seq，如 start_1, click_2, findPic_3
+  - type: 上表中的节点类型标识
+  - label: 节点显示名称
+  - position: 画布坐标，相邻节点水平间距 200，垂直间距 120
+  - config: 该类型参数对象，key 与上表"参数"字段对应
+- edge: { id: string, source: string, target: string, sourceHandle?: string }
+  - id: 格式为 e_source_target
+  - sourceHandle: 多出口节点的分支标识
+    - condition / appRunning 节点: "true"（下）/ "false"（右）
+    - loop 节点: "body"（循环体）/ "exit"（退出）
+    - 单出口节点不需要此字段
+
+## 当前画布工作流数据
+${flowJson}
+
+## 规则
+1. 用户描述需求时，生成完整的工作流 JSON（不要只输出片段）
+2. 每个节点 id 必须全局唯一，格式 type_seq（如 start_1, click_2）
+3. start 节点必须有且只有一个
+4. 所有节点通过 edges 连接，形成完整流程
+5. config 中的参数使用默认值或用户提供的值；用户未提供且无法推断的必填参数用 "TODO_参数名" 占位
+6. 如果用户要求修改已有工作流，基于当前画布数据修改后输出完整的新 JSON
+7. 变量引用语法：{{nodeId.outputKey}}，例如 {{findPic_1.matchX}}
+8. variable 节点的 action=createOrSet 表示"创建或赋值"（变量不存在时初始化，已存在则保留），set 表示无条件赋值
+9. loop 节点的 body 链最后一个节点不需要连回 loop，引擎会自动返回条件判断
+
+## 输出格式要求
+- 你的回复必须包含一个完整的 JSON 对象：{"nodes": [...], "edges": [...]}
+- JSON 放在 \`\`\`json 和 \`\`\` 代码块中
+- 可以在代码块前后添加简要说明文字
+- 代码块内的 JSON 必须完整且可直接 JSON.parse
+- 每个节点的 position 要合理分布，避免重叠（建议水平间距 200，垂直间距 120）`
 }
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
@@ -26,7 +118,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: AiChatRequest }>(
     '/api/ai/chat',
     async (request, reply) => {
-      const { messages, config } = request.body
+      const { messages, config, currentFlow } = request.body
 
       if (!config?.apiUrl || !config?.apiKey || !config?.model) {
         return reply.status(400).send({
@@ -44,6 +136,13 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         })
       }
 
+      // 注入后端构建的系统提示词（含最新节点信息）
+      const systemPrompt = buildSystemPrompt(currentFlow)
+      const llmMessages: LlmMessage[] = [
+        { role: 'system', content: systemPrompt },
+        ...messages.filter((m) => m.role !== 'system'),
+      ]
+
       // 调用外部 LLM API（流式）
       let response: Response
       try {
@@ -55,7 +154,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
           },
           body: JSON.stringify({
             model: config.model,
-            messages,
+            messages: llmMessages,
             stream: true,
           }),
         })

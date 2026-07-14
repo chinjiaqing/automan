@@ -21,7 +21,20 @@
         <Button text size="small" icon="pi pi-trash" label="清空画布" severity="secondary" @click="handleClear" />
       </div>
       <div class="flex items-center gap-2">
-        <Button size="small" icon="pi pi-save" label="保存" :disabled="flowNodes.length === 0" @click="handleSave" />
+        <Button size="small" icon="pi pi-save" label="另存为" :disabled="flowNodes.length === 0" @click="handleSaveAs" />
+        <div class="save-to-wrapper">
+          <Select
+            v-model="saveToId"
+            :options="workflowList"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="保存为…"
+            class="save-to-select"
+            size="small"
+            :disabled="flowNodes.length === 0"
+            @update:modelValue="handleSaveTo"
+          />
+        </div>
         <Button icon="pi pi-cog" text size="small" severity="secondary" @click="configDialogVisible = true" />
       </div>
     </div>
@@ -64,21 +77,21 @@
       @save="handleConfigSave"
     />
 
-    <!-- 保存弹窗 -->
-    <Dialog v-model:visible="saveDialogVisible" header="保存脚本" :modal="true" :style="{ width: '360px' }">
+    <!-- 另存为弹窗 -->
+    <Dialog v-model:visible="saveDialogVisible" header="另存为新脚本" :modal="true" :style="{ width: '360px' }">
       <div class="mb-4">
         <label class="block text-sm text-gray-600 mb-1.5">脚本名称</label>
         <InputText
           class="w-full"
           v-model="saveName"
           placeholder="请输入脚本名称"
-          @keydown.enter="confirmSave"
+          @keydown.enter="confirmSaveAs"
           size="small"
         />
       </div>
       <template #footer>
         <Button severity="secondary" text label="取消" @click="saveDialogVisible = false" />
-        <Button label="确定" :disabled="!saveName.trim()" @click="confirmSave" />
+        <Button label="确定" :disabled="!saveName.trim()" @click="confirmSaveAs" />
       </template>
     </Dialog>
 
@@ -93,6 +106,7 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import { useToast } from 'primevue/usetoast'
 import FlowCanvas from '../components/FlowCanvas.vue'
 import ChatPanel from '../components/ChatPanel.vue'
 import LlmConfigDialog from '../components/LlmConfigDialog.vue'
@@ -102,6 +116,7 @@ import type { Workflow, WorkflowNode, WorkflowEdge } from '@automan/shared/types
 
 // ── AI 聊天 ──
 const { config, messages, isStreaming, error, isConfigured, updateConfig, send, clearChat } = useAiChat()
+const toast = useToast()
 
 // ── 画布状态 ──
 const flowNodes = ref<WorkflowNode[]>([])
@@ -116,9 +131,12 @@ const currentWorkflowName = ref('')
 // ── 配置弹窗 ──
 const configDialogVisible = ref(false)
 
-// ── 保存弹窗 ──
+// ── 另存为弹窗 ──
 const saveDialogVisible = ref(false)
 const saveName = ref('')
+
+// ── 保存为（覆盖已有）──
+const saveToId = ref<string | null>(null)
 
 // ── 文件导入 ──
 const fileInput = ref<HTMLInputElement>()
@@ -182,12 +200,13 @@ function handleClear() {
   clearChat()
 }
 
-function handleSave() {
+/** 另存为：弹窗 → 创建新脚本 */
+function handleSaveAs() {
   saveName.value = currentWorkflowName.value || ''
   saveDialogVisible.value = true
 }
 
-async function confirmSave() {
+async function confirmSaveAs() {
   const name = saveName.value.trim()
   if (!name) return
   saveDialogVisible.value = false
@@ -202,7 +221,26 @@ async function confirmSave() {
     currentWorkflowName.value = name
     selectedWorkflowId.value = res.data.id
     await loadWorkflowList()
+    toast.add({ severity: 'success', summary: '已另存为', detail: `"${name}" 创建成功`, life: 3000 })
   }
+}
+
+/** 保存为：覆盖更新已有脚本 */
+async function handleSaveTo(id: string | null) {
+  if (!id) return
+  const wf = workflowList.value.find((w) => w.id === id)
+  if (!wf) return
+
+  await workflowApi.save(id, {
+    name: wf.name,
+    nodes: flowNodes.value,
+    edges: flowEdges.value,
+  })
+  currentWorkflowName.value = wf.name
+  selectedWorkflowId.value = id
+  // 重置 Select 占位
+  saveToId.value = null
+  toast.add({ severity: 'success', summary: '已保存', detail: `"${wf.name}" 已更新`, life: 3000 })
 }
 
 function handleConfigSave(cfg: typeof config.value) {
@@ -330,5 +368,13 @@ function isPureExplanation(content: string): boolean {
 .ai-flow__chat {
   flex: 1;
   min-width: 0;
+}
+
+.save-to-wrapper {
+  display: inline-flex;
+}
+
+.save-to-select {
+  width: 140px;
 }
 </style>

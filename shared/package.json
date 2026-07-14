@@ -8,6 +8,7 @@
   "private": true,
   "exports": {
     "./types.js": "./src/types.ts",
+    "./nodeTypes.js": "./src/nodeTypes.ts",
     "./utils/*.js": "./src/utils/*.ts"
   },
   "scripts": {
