@@ -43,12 +43,40 @@ function Write-Step { param($msg) Write-Host "[prepare-python] $msg" -Foreground
 function Write-Ok   { param($msg) Write-Host "[prepare-python] OK: $msg" -ForegroundColor Green }
 function Fail       { param($msg) Write-Host "[prepare-python] FAIL: $msg" -ForegroundColor Red; exit 1 }
 
-# -- Step 1: host Python 3.12 (used for pip --target) --
-$hostPy = Get-Command python -ErrorAction SilentlyContinue
-if (-not $hostPy) { Fail 'host python not found. Install Python 3.12 (python.org or "winget install Python.Python.3.12")' }
-$hostVer = & python -c "import sys; print('%d.%d' % sys.version_info[:2])"
-if ($hostVer -ne '3.12') { Fail "host python must be 3.12 to match the embeddable runtime (got $hostVer)" }
-Write-Ok "host python $hostVer"
+# -- Step 1: locate a host Python 3.12 (used for pip --target) --
+# The embeddable is cp312, so the interpreter that resolves the wheels must be 3.12
+# too. A bare "python" may be an activated virtualenv of another minor (e.g. a 3.11
+# venv), so resolve 3.12 explicitly and use its full path for every pip call below.
+function Get-Py312 {
+    # 1) py launcher (ignores any activated venv)
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        $exe = & py -3.12 -c "import sys; print(sys.executable)" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $exe -and (Test-Path $exe)) { return $exe }
+    }
+    # 2) bare python, only if it already reports 3.12
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        $ver = & python -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+        if ($ver -eq '3.12') { return $python.Source }
+    }
+    # 3) well-known per-user / per-machine install locations
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
+        'C:\Program Files\Python312\python.exe',
+        'C:\Python312\python.exe'
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) {
+            $ver = & $c -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+            if ($ver -eq '3.12') { return $c }
+        }
+    }
+    return $null
+}
+$PY = Get-Py312
+if (-not $PY) { Fail 'host Python 3.12 not found. Install it ("winget install Python.Python.3.12"); an activated non-3.12 virtualenv will NOT be used' }
+$hostVer = & $PY -c "import sys; print('%d.%d.%d' % sys.version_info[:3])"
+Write-Ok "host python $hostVer -> $PY"
 
 # -- Step 2: download / cache the embeddable zip --
 if (-not (Test-Path $VENDOR)) { New-Item -ItemType Directory -Path $VENDOR -Force | Out-Null }
@@ -86,17 +114,17 @@ Write-Ok 'embeddable extracted + _pth configured'
 $sitePackages = Join-Path $OUT 'Lib\site-packages'
 $reqFile = if (Test-Path $REQ_LOCK) { $REQ_LOCK } else { $REQ_MAIN }
 Write-Step "installing deps from $(Split-Path -Leaf $reqFile)"
-& python -m pip install --target $sitePackages --only-binary=:all: `
+& $PY -m pip install --target $sitePackages --only-binary=:all: `
     -r $reqFile --no-warn-script-location --quiet `
     -i https://pypi.tuna.tsinghua.edu.cn/simple
 if ($LASTEXITCODE -ne 0) {
     Write-Step 'tsinghua mirror failed, retrying pypi.org'
-    & python -m pip install --target $sitePackages --only-binary=:all: `
+    & $PY -m pip install --target $sitePackages --only-binary=:all: `
         -r $reqFile --no-warn-script-location --quiet
     if ($LASTEXITCODE -ne 0) { Fail 'pip install failed' }
 }
 # Record resolved versions (source for requirements-lock.txt when built from floating spec)
-& python -m pip freeze --path $sitePackages | Set-Content -Path (Join-Path $OUT 'installed-packages.txt')
+& $PY -m pip freeze --path $sitePackages | Set-Content -Path (Join-Path $OUT 'installed-packages.txt')
 Write-Ok 'python deps installed'
 if ($reqFile -eq $REQ_MAIN) {
     Write-Host '[prepare-python] NOTE: built from floating requirements.txt' -ForegroundColor Yellow

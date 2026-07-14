@@ -53,6 +53,14 @@ Set-Location $REPO
 
 # -- Step 2: install workspace dependencies --
 Write-Step 'pnpm install'
+# pnpm behaviour for this non-interactive packaging run (set once, applies to all steps):
+#  - CI=true: authorize the node_modules purge pnpm 11 wants when build-script approvals
+#    change; without a TTY it otherwise aborts (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY)
+#  - verify-deps-before-run=false: Step 4's "pnpm deploy --prod" flips the workspace into
+#    prod mode; pnpm would then auto-strip devDependencies (electron-builder) before the
+#    next filtered command (Step 5 smoke / Step 7 installer)
+$env:CI = 'true'
+$env:pnpm_config_verify_deps_before_run = 'false'
 & pnpm install --frozen-lockfile
 Check-Exit 'pnpm install failed'
 
@@ -78,6 +86,10 @@ Check-Exit 'prepare-python failed'
 
 # -- Step 7: NSIS installer --
 Write-Step 'building NSIS installer'
+# Belt-and-suspenders: restore any devDependencies (electron-builder) that Step 4's
+# prod deploy may have pruned, so the binary is present before we invoke it.
+& pnpm install --frozen-lockfile
+Check-Exit 'restore dev dependencies failed'
 & pnpm --filter '@automan/desktop' exec electron-builder --win --publish never
 Check-Exit 'electron-builder failed'
 

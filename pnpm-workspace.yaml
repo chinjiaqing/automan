@@ -3,11 +3,21 @@ packages:
   - 'shared'
   - 'web'
   - 'desktop'
-# 允许执行 postinstall 构建脚本的依赖白名单（pnpm 10/11 标准数组格式）
+# pnpm 11：构建脚本白名单使用 allowBuilds 布尔映射（这是 11.x 实际生效的键）
+allowBuilds:
+  '@u4/opencv4nodejs': true
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  vue-demi: true
+  winax: true
+# pnpm 10 兼容：onlyBuiltDependencies 数组格式（旧版本仍读取此键）
 onlyBuiltDependencies:
   - '@u4/opencv4nodejs'
   - better-sqlite3
   - electron
+  - electron-winstaller
   - esbuild
   - vue-demi
   - winax
