@@ -159,8 +159,6 @@ export class WorkflowActor extends ActorBase {
         }
       }
 
-      this.sendLog('info', `#${runNum} executing...`)
-
       // 初始化 local 变量（每次重置），session 变量保留
       const variables = this.initVariables()
 

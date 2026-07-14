@@ -67,8 +67,10 @@ function onActorLog(payload: unknown) {
 
 function onWorkflowStatus(payload: unknown) {
   const p = payload as WorkflowStatusPayload
-  const stateLabel = p.state === 'running' ? '执行中' : p.state === 'error' ? '出错' : '空闲'
-  appendLog(p.state === 'error' ? 'error' : 'info', `[${p.workflowId.slice(0, 8)}] #${p.executionCount} ${stateLabel}`)
+  // 只在出错时记录日志，running/idle 状态由节点日志体现，不再重复记录
+  if (p.state === 'error') {
+    appendLog('error', `[${p.workflowId.slice(0, 8)}] #${p.executionCount} 出错`)
+  }
 
   // 更新 flowState 计数
   if (p.flowState) {
@@ -101,7 +103,6 @@ function onWorkflowVisual(payload: unknown) {
   const am = new Map(annotationMap.value)
   am.set(p.deviceId, { annotations: p.annotations, executionCount: p.executionCount, timestamp: p.timestamp })
   annotationMap.value = am
-  appendLog('info', `[visual] ${p.annotations.length} annotations from #${p.executionCount}`)
 }
 
 /** 设备级日志（模拟器启动、分辨率校准等） */
