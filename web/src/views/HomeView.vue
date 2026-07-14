@@ -43,22 +43,23 @@
       </div>
 
       <!-- 第三栏：操作按钮 + 看板 + 日志 -->
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0 flex flex-col">
+        <!-- 实时看板：独立于日志区，受开关控制 -->
+        <ExecutionViewer v-if="showViewer" :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" @manual-refresh="handleManualRefresh" />
         <LogPanel
           :logs="logs"
           :checked-count="getCheckedCount(selectedDevice?.id ?? '')"
           :is-running="isRunning"
           :is-paused="isPaused"
           :elapsed="elapsed"
+          :show-viewer="showViewer"
           @start="handleStart"
           @stop="handleStop"
           @pause="handlePause"
           @resume="handleResume"
           @clear="clearLogs"
-        >
-          <!-- 实时看板：在操作按钮下方、日志上方 -->
-          <ExecutionViewer :screenshot="deviceScreenshot" :annotations="deviceAnnotations" :device-id="selectedId" @manual-refresh="handleManualRefresh" />
-        </LogPanel>
+          @toggle-viewer="showViewer = !showViewer"
+        />
       </div>
     </template>
 
@@ -104,6 +105,7 @@ const { devices, loading, fetchDevices, deleteDevice } = useDevices()
 const { logs, isRunning, elapsed, screenshotMap, annotationMap, deviceRunStatusMap, getCheckedCount, startAll, stopAll, pauseDevice, resumeDevice, clearLogs } = useWorkflowRun()
 
 const selectedId = ref('')
+const showViewer = ref(true)
 const selectedDevice = computed(() => devices.value.find((d) => d.id === selectedId.value))
 
 /** 当前设备的最新截图 */

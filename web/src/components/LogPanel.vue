@@ -1,5 +1,5 @@
 <template>
-  <div class="log-panel flex flex-col h-full bg-gray-50">
+  <div class="log-panel flex flex-col flex-1 min-h-0 bg-gray-50">
     <!-- 固定顶部操作栏 -->
     <div class="log-panel__header flex items-center gap-3 px-4 bg-white border-b border-gray-200">
       <span class="text-sm text-gray-600">
@@ -55,6 +55,16 @@
       <Button
         text
         rounded
+        size="small"
+        :icon="showViewer ? 'pi pi-eye' : 'pi pi-eye-slash'"
+        :severity="showViewer ? 'info' : 'secondary'"
+        title="截图回显"
+        @click="$emit('toggleViewer')"
+      />
+
+      <Button
+        text
+        rounded
         severity="secondary"
         size="small"
         icon="pi pi-trash"
@@ -62,9 +72,6 @@
         @click="$emit('clear')"
       />
     </div>
-
-    <!-- 插槽：看板等外部内容 -->
-    <slot />
 
     <!-- 滚动日志区 -->
     <div ref="logContainer" class="log-panel__body flex-1 overflow-y-auto px-4 py-2 font-mono text-xs">
@@ -98,6 +105,7 @@ const props = defineProps<{
   isRunning: boolean
   isPaused: boolean
   elapsed: number
+  showViewer: boolean
 }>()
 
 defineEmits<{
@@ -106,6 +114,7 @@ defineEmits<{
   pause: []
   resume: []
   clear: []
+  toggleViewer: []
 }>()
 
 function formatElapsed(ms: number): string {
