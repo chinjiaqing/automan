@@ -238,8 +238,8 @@ export class WorkflowEngine {
           }
 
           case 'randomDelay': {
-            const rawLeft = Number(resolveValue(node.config.left, ctx.outputs) ?? 0)
-            const rawRight = Number(resolveValue(node.config.right, ctx.outputs) ?? 1000)
+            const rawLeft = Number(resolveValue(node.config.left, ctx.outputs, ctx.variables) ?? 0)
+            const rawRight = Number(resolveValue(node.config.right, ctx.outputs, ctx.variables) ?? 1000)
             const left = Math.max(0, Math.min(rawLeft, rawRight))
             const right = Math.max(left, rawRight)
             const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
@@ -310,7 +310,7 @@ export class WorkflowEngine {
           }
 
           case 'log': {
-            const msg = String(resolveValue(node.config.message, ctx.outputs) ?? '')
+            const msg = String(resolveValue(node.config.message, ctx.outputs, ctx.variables) ?? '')
             emit('info', `[${nodeLabel(node)}] ${msg}`)
             currentNodeId = this.followEdge(node.id, undefined, adj)
             break
@@ -365,23 +365,23 @@ export class WorkflowEngine {
         if (varName in ctx.variables) {
           result = current
         } else {
-          result = Number(resolveValue(value, ctx.outputs)) || 0
+          result = Number(resolveValue(value, ctx.outputs, ctx.variables)) || 0
         }
         break
       case 'set':
-        result = Number(resolveValue(value, ctx.outputs)) || 0
+        result = Number(resolveValue(value, ctx.outputs, ctx.variables)) || 0
         break
       case 'add':
-        result = current + (Number(resolveValue(operand, ctx.outputs)) || 0)
+        result = current + (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 0)
         break
       case 'sub':
-        result = current - (Number(resolveValue(operand, ctx.outputs)) || 0)
+        result = current - (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 0)
         break
       case 'mul':
-        result = current * (Number(resolveValue(operand, ctx.outputs)) || 1)
+        result = current * (Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 1)
         break
       case 'div': {
-        const d = Number(resolveValue(operand, ctx.outputs)) || 1
+        const d = Number(resolveValue(operand, ctx.outputs, ctx.variables)) || 1
         result = d === 0 ? 0 : current / d
         break
       }
@@ -399,8 +399,8 @@ export class WorkflowEngine {
   /** 评估条件 */
   private evalCondition(node: WorkflowNode, ctx: EngineContext): boolean {
     const { left, operator, right } = node.config as Record<string, unknown>
-    const l = resolveValue(left, ctx.outputs)
-    const r = resolveValue(right, ctx.outputs)
+    const l = resolveValue(left, ctx.outputs, ctx.variables)
+    const r = resolveValue(right, ctx.outputs, ctx.variables)
     return evaluateCondition(l, String(operator), r)
   }
 
@@ -487,8 +487,8 @@ export class WorkflowEngine {
             break
           }
           case 'randomDelay': {
-            const rawLeft = Number(resolveValue(innerNode.config.left, ctx.outputs) ?? 0)
-            const rawRight = Number(resolveValue(innerNode.config.right, ctx.outputs) ?? 1000)
+            const rawLeft = Number(resolveValue(innerNode.config.left, ctx.outputs, ctx.variables) ?? 0)
+            const rawRight = Number(resolveValue(innerNode.config.right, ctx.outputs, ctx.variables) ?? 1000)
             const left = Math.max(0, Math.min(rawLeft, rawRight))
             const right = Math.max(left, rawRight)
             const actualMs = Math.floor(Math.random() * (right - left + 1)) + left
@@ -546,7 +546,7 @@ export class WorkflowEngine {
             break
           }
           case 'log': {
-            const msg = String(resolveValue(innerNode.config.message, ctx.outputs) ?? '')
+            const msg = String(resolveValue(innerNode.config.message, ctx.outputs, ctx.variables) ?? '')
             emit('info', `[${nodeLabel(innerNode)}] ${msg}`)
             nodeId = this.followEdge(innerNode.id, undefined, adj)
             break
@@ -683,8 +683,8 @@ export class WorkflowEngine {
 
   /** 点击节点 */
   private async execClick(node: WorkflowNode, ctx: EngineContext, emit: LogFn): Promise<void> {
-    const rawX = Number(resolveValue(node.config.x, ctx.outputs) ?? 0)
-    const rawY = Number(resolveValue(node.config.y, ctx.outputs) ?? 0)
+    const rawX = Number(resolveValue(node.config.x, ctx.outputs, ctx.variables) ?? 0)
+    const rawY = Number(resolveValue(node.config.y, ctx.outputs, ctx.variables) ?? 0)
     const [x, y] = clampPoint(rawX, rawY, ctx.screenshotWidth, ctx.screenshotHeight)
     const [actualX, actualY] = toActualPoint(x, y, ctx.scaleFactor)
     emit('info', `[${nodeLabel(node)}] ${actualX},${actualY}`)

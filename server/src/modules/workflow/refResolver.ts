@@ -81,11 +81,24 @@ function evalArithmetic(expr: string): number {
 /**
  * 解析单个值，将 {{nodeId.key}} 替换为 context 中的实际值
  * 支持内嵌算术表达式，如 "{{ref}} + 100"
+ * 支持 {{var:name}} 直接读取变量池
  * @param value 待解析的值
  * @param outputs 节点输出映射 { [nodeId]: { [key]: value } }
+ * @param variables 变量池 { [name]: value }（可选）
  */
-export function resolveValue(value: unknown, outputs: Record<string, Record<string, unknown>>): unknown {
+export function resolveValue(
+  value: unknown,
+  outputs: Record<string, Record<string, unknown>>,
+  variables?: Record<string, unknown>,
+): unknown {
   if (typeof value !== 'string') return value
+
+  // {{var:name}} → 直接读取变量池
+  const varFullMatch = /^\{\{var:([^{}]+)\}\}$/.exec(value)
+  if (varFullMatch) {
+    const varName = varFullMatch[1]
+    return variables?.[varName] ?? value
+  }
 
   // 完整引用 {{nodeId.key}} → 返回原始类型（不做算术）
   const fullMatch = /^\{\{([^{}.]+)\.([^{}.]+)\}\}$/.exec(value)
@@ -97,10 +110,14 @@ export function resolveValue(value: unknown, outputs: Record<string, Record<stri
   // 内嵌引用 → 字符串替换，再尝试算术求值
   if (value.includes('{{')) {
     const replaced = value.replace(
-      /\{\{([^{}.]+)\.([^{}.]+)\}\}/g,
-      (_, nodeId, key) => {
+      /\{\{(?:var:([^{}]+)|([^{}.]+)\.([^{}.]+))\}\}/g,
+      (match, varName, nodeId, key) => {
+        if (varName) {
+          const v = variables?.[varName]
+          return v !== undefined ? String(v) : match
+        }
         const v = outputs[nodeId]?.[key]
-        return v !== undefined ? String(v) : `{{${nodeId}.${key}}}`
+        return v !== undefined ? String(v) : match
       },
     )
     // 如果仍有未解析的引用，直接返回字符串

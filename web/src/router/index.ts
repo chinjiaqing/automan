@@ -31,6 +31,11 @@ const router = createRouter({
           name: 'flow',
           component: () => import('../views/FlowView.vue'),
         },
+        {
+          path: 'ai-flow',
+          name: 'ai-flow',
+          component: () => import('../views/AiFlowView.vue'),
+        },
       ],
     },
   ],

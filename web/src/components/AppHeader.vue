@@ -49,6 +49,7 @@ const navItems = [
   { name: 'home', label: '首页', icon: 'pi-home' },
   { name: 'track', label: '开发板', icon: 'pi-image' },
   { name: 'flow', label: '编排', icon: 'pi-sitemap' },
+  { name: 'ai-flow', label: 'AI编排', icon: 'pi-bolt' },
 ]
 
 function isActive(name: string) {
