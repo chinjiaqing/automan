@@ -41,10 +41,10 @@ export ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-b
 
 ## 出包
 
-| 命令 | 说明 |
-|------|------|
-| `pnpm --filter @automan/desktop dist:mac` | mac dmg（arm64；本机构建） |
-| `pnpm --filter @automan/desktop dist:win` | Windows NSIS（**必须在 Windows 上跑**，先执行 `prepare-python.ps1`） |
+| 平台 | 命令 | 说明 |
+|------|------|------|
+| Windows | `powershell -ExecutionPolicy Bypass -File desktop\scripts\dist-win.ps1` | 一键全流程（**必须在 Windows x64 上跑**）；前置：Node 24 LTS、pnpm 10+、Python 3.12。海外网络加 `-SkipMirror` |
+| macOS | `pnpm --filter @automan/desktop dist:mac` | dmg（arm64；先 `pnpm --filter @automan/web build`） |
 
 CI：推 `v*` tag 触发 `.github/workflows/release.yml`，双平台出包并挂到 **draft** Release。
 

@@ -1,19 +1,24 @@
-# ─────────────────────────────────────────────
-# prepare-python — Windows 打包用嵌入式 Python 运行时（→ out/python）
+# ----------------------------------------------------------------------
+# prepare-python -- embedded Python runtime for Windows packaging (-> out/python)
 #
-# 从 start-prod.ps1 提炼，面向打包管线的差异：
-#   1. 不用 get-pip：要求本机/runner 已装完整 Python 3.12（与 embeddable
-#      同 minor，保证选中 cp312 wheel），用它 pip install --target
-#   2. 依赖锁定：server/src/libs/requirements-lock.txt 存在则优先使用；
-#      否则用 requirements.txt 安装，并把 pip freeze 结果写入
-#      out/python/installed-packages.txt——首次构建后应将其固化为 lock 提交
-#   3. VC++ runtime app-local 部署：目标机可能没装 VC++ Redist，
-#      onnxruntime 会 DLL load failed；perUser 安装不能带 vc_redist.exe
-#      （需要管理员权限），故直接把 CRT DLL 拷到 python.exe 同目录
-#   4. fail-fast + import 冒烟
+# Derived from start-prod.ps1, adapted for the packaging pipeline:
+#   1. No get-pip: requires a full host Python 3.12 (same minor as the
+#      embeddable, guarantees cp312 wheels), used for pip install --target
+#   2. Dependency pinning: server/src/libs/requirements-lock.txt is used
+#      when present; otherwise requirements.txt is used and the resolved
+#      versions are written to out/python/installed-packages.txt --
+#      commit that file as requirements-lock.txt after the first build
+#   3. VC++ runtime app-local deployment: target machines may lack the
+#      VC++ Redist and onnxruntime would fail with "DLL load failed";
+#      bundling vc_redist.exe is not an option for perUser installs
+#      (needs admin), so CRT DLLs are copied next to python.exe
+#   4. fail-fast + import smoke test
 #
-# 用法：powershell -ExecutionPolicy Bypass -File desktop/scripts/prepare-python.ps1
-# ─────────────────────────────────────────────
+# NOTE: keep this file ASCII-only. Windows PowerShell 5.1 misreads
+# BOM-less UTF-8 sources, non-ASCII literals would break silently.
+#
+# Usage: powershell -ExecutionPolicy Bypass -File desktop/scripts/prepare-python.ps1
+# ----------------------------------------------------------------------
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
@@ -38,14 +43,14 @@ function Write-Step { param($msg) Write-Host "[prepare-python] $msg" -Foreground
 function Write-Ok   { param($msg) Write-Host "[prepare-python] OK: $msg" -ForegroundColor Green }
 function Fail       { param($msg) Write-Host "[prepare-python] FAIL: $msg" -ForegroundColor Red; exit 1 }
 
-# ── Step 1: 宿主 Python 3.12（用于 pip --target） ──
+# -- Step 1: host Python 3.12 (used for pip --target) --
 $hostPy = Get-Command python -ErrorAction SilentlyContinue
-if (-not $hostPy) { Fail 'host python not found (CI: use actions/setup-python 3.12)' }
+if (-not $hostPy) { Fail 'host python not found. Install Python 3.12 (python.org or "winget install Python.Python.3.12")' }
 $hostVer = & python -c "import sys; print('%d.%d' % sys.version_info[:2])"
-if ($hostVer -ne '3.12') { Fail "host python must be 3.12 (matches embeddable, got $hostVer)" }
+if ($hostVer -ne '3.12') { Fail "host python must be 3.12 to match the embeddable runtime (got $hostVer)" }
 Write-Ok "host python $hostVer"
 
-# ── Step 2: 下载/缓存 embeddable zip ──
+# -- Step 2: download / cache the embeddable zip --
 if (-not (Test-Path $VENDOR)) { New-Item -ItemType Directory -Path $VENDOR -Force | Out-Null }
 $zipPath = Join-Path $VENDOR $PY_ZIP
 if (-not (Test-Path $zipPath)) {
@@ -65,7 +70,7 @@ if (-not (Test-Path $zipPath)) {
 }
 Write-Ok "embeddable zip cached: $zipPath"
 
-# ── Step 3: 解压 + 配置 _pth ──
+# -- Step 3: extract + configure _pth --
 if (Test-Path $OUT) { Remove-Item $OUT -Recurse -Force }
 Expand-Archive -Path $zipPath -DestinationPath $OUT -Force
 @"
@@ -77,7 +82,7 @@ Lib\site-packages
 "@ | Set-Content -Path (Join-Path $OUT 'python312._pth') -Encoding ASCII
 Write-Ok 'embeddable extracted + _pth configured'
 
-# ── Step 4: pip install --target（只允许二进制 wheel） ──
+# -- Step 4: pip install --target (binary wheels only) --
 $sitePackages = Join-Path $OUT 'Lib\site-packages'
 $reqFile = if (Test-Path $REQ_LOCK) { $REQ_LOCK } else { $REQ_MAIN }
 Write-Step "installing deps from $(Split-Path -Leaf $reqFile)"
@@ -90,15 +95,15 @@ if ($LASTEXITCODE -ne 0) {
         -r $reqFile --no-warn-script-location --quiet
     if ($LASTEXITCODE -ne 0) { Fail 'pip install failed' }
 }
-# 记录实际安装版本（未用 lock 时据此固化 requirements-lock.txt）
+# Record resolved versions (source for requirements-lock.txt when built from floating spec)
 & python -m pip freeze --path $sitePackages | Set-Content -Path (Join-Path $OUT 'installed-packages.txt')
 Write-Ok 'python deps installed'
 if ($reqFile -eq $REQ_MAIN) {
-    Write-Host "[prepare-python] NOTE: built from floating requirements.txt;" -ForegroundColor Yellow
-    Write-Host "  固化版本：把 out/python/installed-packages.txt 内容提交为 server/src/libs/requirements-lock.txt" -ForegroundColor Yellow
+    Write-Host '[prepare-python] NOTE: built from floating requirements.txt' -ForegroundColor Yellow
+    Write-Host '  To pin: commit out/python/installed-packages.txt as server/src/libs/requirements-lock.txt' -ForegroundColor Yellow
 }
 
-# ── Step 5: VC++ runtime app-local 部署 ──
+# -- Step 5: VC++ runtime app-local deployment --
 $crtDlls = @('msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'concrt140.dll')
 $redistRoots = @()
 foreach ($vsEdition in @('Enterprise', 'Professional', 'Community', 'BuildTools')) {
@@ -124,8 +129,8 @@ if ($copied -lt 3) {
     Write-Ok "VC++ CRT DLLs deployed ($copied)"
 }
 
-# ── Step 6: import 冒烟 ──
+# -- Step 6: import smoke test --
 Write-Step 'import smoke test'
 & (Join-Path $OUT 'python.exe') -c "import cv2, onnxruntime, rapidocr_onnxruntime; print('imports ok')"
 if ($LASTEXITCODE -ne 0) { Fail 'import smoke test failed' }
-Write-Ok "done → $OUT"
+Write-Ok "done -> $OUT"
