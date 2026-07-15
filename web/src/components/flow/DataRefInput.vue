@@ -8,15 +8,30 @@
       @input="onInput($event)"
     />
     <Button
-      v-if="upstreamNodes.length > 0"
+      v-if="upstreamNodes.length > 0 || variableNodes.length > 0"
       text
       severity="secondary"
       size="small"
       icon="pi pi-at"
-      title="引用上游输出"
+      title="Insert reference"
       @click="showDropdown = !showDropdown"
     />
     <div v-if="showDropdown" class="data-ref-input__dropdown">
+      <div
+        v-if="variableNodes.length > 0"
+        class="data-ref-input__group"
+      >
+        <div class="data-ref-input__group-label">变量</div>
+        <button
+          v-for="node in variableNodes"
+          :key="node.name"
+          class="data-ref-input__option"
+          @click="insertVarRef(node.name)"
+        >
+          {{ node.label }}
+          <span class="text-gray-400">({{ node.name }})</span>
+        </button>
+      </div>
       <div
         v-for="node in upstreamNodes"
         :key="node.id"
@@ -24,7 +39,7 @@
       >
         <div class="data-ref-input__group-label">{{ node.label }} ({{ node.id }})</div>
         <button
-          v-for="port in getNodeOutputs(node.type)"
+          v-for="port in getNodeOutputs(node)"
           :key="port.key"
           class="data-ref-input__option"
           @click="insertRef(node.id, port.key)"
@@ -43,12 +58,23 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { getNodeTypeDef } from '../../flow/nodeTypes.js'
 import { makeRef } from '../../flow/refResolver.js'
+import type { OutputPort } from '@automan/shared/types.js'
 
-const props = defineProps<{
+type ReferenceNode = {
+  id: string
+  label: string
+  type: string
+  outputs?: OutputPort[]
+}
+
+const props = withDefaults(defineProps<{
   value: string
   placeholder?: string
-  upstreamNodes: Array<{ id: string; label: string; type: string }>
-}>()
+  upstreamNodes: ReferenceNode[]
+  variableNodes?: Array<{ name: string; label: string; nodeId: string; scope?: string }>
+}>(), {
+  variableNodes: () => [],
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -60,14 +86,22 @@ function onInput(event: Event) {
   emit('update:modelValue', (event.target as HTMLInputElement).value)
 }
 
-function getNodeOutputs(type: string) {
-  const def = getNodeTypeDef(type)
-  return def?.outputs ?? []
+function getNodeOutputs(node: ReferenceNode) {
+  return node.outputs ?? getNodeTypeDef(node.type)?.outputs ?? []
 }
 
 function insertRef(nodeId: string, outputKey: string) {
   const refStr = makeRef(nodeId, outputKey)
   // 如果当前值已经是纯引用，替换它；否则追加
+  const newVal = /^\{\{[^}]+\}\}$/.test(props.value) || !props.value
+    ? refStr
+    : `${props.value}${refStr}`
+  emit('update:modelValue', newVal)
+  showDropdown.value = false
+}
+
+function insertVarRef(name: string) {
+  const refStr = `{{var:${name}}}`
   const newVal = /^\{\{[^}]+\}\}$/.test(props.value) || !props.value
     ? refStr
     : `${props.value}${refStr}`

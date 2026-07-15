@@ -17,8 +17,7 @@ import { adbLaunchApp, adbKillApp, adbIsAppRunning } from '../../libs/adb-app.js
 /** 从 data URL (base64 PNG) 解析图片尺寸 */
 function parsePngSizeFromDataUrl(dataUrl: string): { width: number; height: number } {
   const commaIdx = dataUrl.indexOf(',')
-  if (commaIdx === -1) return { width: 0, height: 0 }
-  const raw = dataUrl.slice(commaIdx + 1)
+  const raw = commaIdx === -1 ? dataUrl : dataUrl.slice(commaIdx + 1)
   const buf = Buffer.from(raw.slice(0, 32), 'base64')
   if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50) {
     return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
@@ -842,7 +841,15 @@ export class WorkflowEngine {
       ctx.screenshotHeight,
     )
 
-    const templateStr = String(templateImage)
+    const resolvedTemplate = resolveValue(templateImage, ctx.outputs, ctx.variables)
+    if (typeof resolvedTemplate !== 'string' || !resolvedTemplate.trim()) {
+      throw new Error('识图节点模板图片无效')
+    }
+    if (resolvedTemplate.includes('{{')) {
+      throw new Error(`识图节点模板图片引用未解析: ${resolvedTemplate}`)
+    }
+
+    const templateStr = resolvedTemplate
     const result = await findPicPro({
       image: ctx.screenshot,
       template: templateStr,

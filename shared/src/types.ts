@@ -446,14 +446,14 @@ export interface FieldSchema {
 export interface OutputPort {
   key: string
   label: string
-  dataType: 'string' | 'number' | 'boolean' | 'coord'
+  dataType: 'string' | 'number' | 'boolean' | 'coord' | 'image'
 }
 
 /** 输入端口 */
 export interface InputPort {
   key: string
   label: string
-  dataType: 'string' | 'number' | 'boolean' | 'coord'
+  dataType: 'string' | 'number' | 'boolean' | 'coord' | 'image'
   optional?: boolean
 }
 
@@ -712,7 +712,7 @@ export interface BatchRunWorkflowResponse {
 /** 片段参数定义 */
 export interface FragmentParam {
   name: string
-  type: 'number' | 'string'
+  type: 'number' | 'string' | 'image'
   defaultValue?: string
   /** 中文标签 */
   label?: string

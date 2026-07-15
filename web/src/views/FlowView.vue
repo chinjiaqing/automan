@@ -245,7 +245,12 @@ const upstreamNodes = computed(() => {
   if (!selectedNode.value) return []
   return nodes.value
     .filter((n) => n.id !== selectedNode.value!.id && n.type !== 'end')
-    .map((n) => ({ id: n.id, label: n.label ?? n.data?.label, type: n.type }))
+    .map((n) => ({
+      id: n.id,
+      label: n.label ?? n.data?.label,
+      type: n.type,
+      config: (n.data?.config ?? {}) as Record<string, unknown>,
+    }))
 })
 
 /** 工作流中所有数据节点（供 data-source 下拉引用） */

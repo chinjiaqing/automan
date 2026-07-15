@@ -74,6 +74,7 @@ watch(() => props.outputs, (v) => {
 const typeOptions = [
   { label: '字符串', value: 'string' },
   { label: '数字', value: 'number' },
+  { label: '图片', value: 'image' },
 ]
 
 /** 随机生成变量名，如 input_ax1jak */

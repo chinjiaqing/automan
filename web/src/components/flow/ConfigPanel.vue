@@ -80,9 +80,10 @@
           <!-- data-ref / data-input -->
           <DataRefInput
             v-else-if="field.type === 'data-ref' || field.type === 'data-input'"
-            :value="getConfig(field.key) as string"
+            :value="String(getConfig(field.key) ?? '')"
             :placeholder="field.placeholder"
-            :upstream-nodes="upstreamNodes"
+            :upstream-nodes="referenceNodes"
+            :variable-nodes="dataNodes"
             @update:modelValue="setConfig(field.key, $event)"
           />
 
@@ -109,44 +110,20 @@
             v-else-if="field.type === 'coord-ref'"
             :value="formatCoordStr(getConfig(field.key))"
             :placeholder="field.placeholder ?? 'x1,y1,x2,y2'"
-            :upstream-nodes="upstreamNodes"
+            :upstream-nodes="referenceNodes"
+            :variable-nodes="dataNodes"
             @update:modelValue="setConfig(field.key, $event)"
           />
 
           <!-- image-upload -->
-          <div v-else-if="field.type === 'image-upload'" class="config-panel__field">
-            <!-- 已上传图片预览 -->
-            <div v-if="getConfig(field.key)" class="mb-1.5 relative inline-block overflow-visible">
-              <img
-                :src="getConfig(field.key) as string"
-                class="block rounded border border-gray-200"
-                style="max-width: 100%; max-height: 80px;"
-              />
-              <button
-                class="img-remove-btn"
-                title="移除图片"
-                @click.stop="setConfig(field.key, '')"
-              >
-                <i class="pi pi-times" style="font-size: 10px;" />
-              </button>
-            </div>
-            <Button
-              outlined
-              severity="secondary"
-              size="small"
-              class="w-full"
-              :label="getConfig(field.key) ? '点击替换' : '点击上传模板图片'"
-              :icon="getConfig(field.key) ? 'pi pi-pencil' : 'pi pi-upload'"
-              @click="handleImageUpload(field.key)"
-            />
-            <input
-              :ref="(el) => setFileRef(field.key, el as HTMLInputElement)"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              @change="onFileChange($event, field.key)"
-            />
-          </div>
+          <ImageValueInput
+            v-else-if="field.type === 'image-upload'"
+            :model-value="String(getConfig(field.key) ?? '')"
+            :placeholder="field.placeholder ?? '上传模板图片或引用图片变量'"
+            :upstream-nodes="referenceNodes"
+            :variable-nodes="dataNodes"
+            @update:modelValue="setConfig(field.key, $event)"
+          />
         </div>
       </template>
 
@@ -170,10 +147,20 @@
           <div class="config-panel__label mb-1">输入参数</div>
           <div v-for="param in selectedFragment.inputs" :key="param.name" class="config-panel__field">
             <label class="config-panel__label">{{ param.label || param.name }}</label>
-            <DataRefInput
-              :value="getConfig(`arg_${param.name}`) as string"
+            <ImageValueInput
+              v-if="param.type === 'image'"
+              :model-value="String(getConfig(`arg_${param.name}`) ?? '')"
               :placeholder="`默认: ${param.defaultValue ?? ''}`"
-              :upstream-nodes="upstreamNodes"
+              :upstream-nodes="referenceNodes"
+              :variable-nodes="dataNodes"
+              @update:modelValue="setConfig(`arg_${param.name}`, $event)"
+            />
+            <DataRefInput
+              v-else
+              :value="String(getConfig(`arg_${param.name}`) ?? '')"
+              :placeholder="`默认: ${param.defaultValue ?? ''}`"
+              :upstream-nodes="referenceNodes"
+              :variable-nodes="dataNodes"
               @update:modelValue="setConfig(`arg_${param.name}`, $event)"
             />
           </div>
@@ -202,8 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import Button from 'primevue/button'
+import { computed } from 'vue'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
@@ -212,13 +198,20 @@ import { getNodeTypeDef } from '../../flow/nodeTypes.js'
 import type { NodeTypeDefinition, FieldSchema, Fragment, OutputPort } from '@automan/shared/types.js'
 import DataRefInput from './DataRefInput.vue'
 import DataSourceSelect from './DataSourceSelect.vue'
+import ImageValueInput from './ImageValueInput.vue'
 
 const props = withDefaults(defineProps<{
   nodeType: string
   nodeId: string
   nodeLabel: string
   config: Record<string, unknown>
-  upstreamNodes: Array<{ id: string; label: string; type: string }>
+  upstreamNodes: Array<{
+    id: string
+    label: string
+    type: string
+    config?: Record<string, unknown>
+    outputs?: OutputPort[]
+  }>
   dataNodes: Array<{ name: string; label: string; nodeId: string; scope?: string }>
   /** call 节点专用：片段列表 */
   fragments?: Fragment[]
@@ -250,13 +243,32 @@ const effectiveOutputs = computed<OutputPort[]>(() => {
     return selectedFragment.value.outputs.map((p) => ({
       key: p.name,
       label: p.label || p.name,
-      dataType: p.type === 'number' ? 'number' : 'string',
+      dataType: p.type,
     }))
   }
   return nodeDef.value?.outputs ?? []
 })
 
-const fileRefs = ref<Record<string, HTMLInputElement | null>>({})
+/**
+ * call 节点的返回值由所选片段动态决定，不能从静态节点定义中读取。
+ * 将它们附加到引用节点，供所有数据引用控件统一使用。
+ */
+const referenceNodes = computed(() => props.upstreamNodes.map((node) => {
+  if (node.type !== 'call') return node
+
+  const fragmentId = node.config?.fragmentId as string | undefined
+  const fragment = props.fragments.find((item) => item.id === fragmentId)
+  if (!fragment) return node
+
+  return {
+    ...node,
+    outputs: fragment.outputs.map((param) => ({
+      key: param.name,
+      label: param.label || param.name,
+      dataType: param.type,
+    })),
+  }
+}))
 
 /** 下拉选项中文映射 */
 const optionLabels: Record<string, Record<string, string>> = {
@@ -280,10 +292,6 @@ function getSelectOptions(field: FieldSchema): Array<{ label: string; value: str
 /** Select 变化时触发配置更新，并处理联动逻辑 */
 function onSelectChange(key: string, value: string) {
   setConfig(key, value)
-}
-
-function setFileRef(key: string, el: HTMLInputElement | null) {
-  fileRefs.value[key] = el
 }
 
 function getConfig(key: string): unknown {
@@ -333,20 +341,6 @@ function parseCoord(str: string): number[] {
   return parts.length === 4 ? parts : [0, 0, 0, 0]
 }
 
-function handleImageUpload(key: string) {
-  fileRefs.value[key]?.click()
-}
-
-function onFileChange(event: Event, key: string) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    setConfig(key, reader.result as string)
-  }
-  reader.readAsDataURL(file)
-}
 </script>
 
 <style scoped>
@@ -404,27 +398,4 @@ function onFileChange(event: Event, key: string) {
   border-top: 1px solid #f3f4f6;
 }
 
-.img-remove-btn {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #ef4444;
-  color: white;
-  border: 2px solid white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: background 0.15s;
-  z-index: 1;
-}
-
-.img-remove-btn:hover {
-  background: #dc2626;
-}
 </style>
