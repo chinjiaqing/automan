@@ -371,7 +371,7 @@ export const debugNodeTypes: NodeTypeDefinition[] = [
 export const fragmentNodeTypes: NodeTypeDefinition[] = [
   {
     type: 'call',
-    category: 'flow',
+    category: 'fragment',
     label: '调用片段',
     icon: 'pi-code',
     description: '调用一个已定义的片段（函数），支持传参和接收返回值',
@@ -384,7 +384,7 @@ export const fragmentNodeTypes: NodeTypeDefinition[] = [
   },
   {
     type: 'return',
-    category: 'flow',
+    category: 'fragment',
     label: '返回',
     icon: 'pi-undo',
     description: '片段返回节点，将值输出给调用方，执行后退出片段',

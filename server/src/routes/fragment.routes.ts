@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────
 
 import type { FastifyInstance } from 'fastify'
-import { db, fragments, fragmentGroups } from '../db/index.js'
+import { db, fragments, fragmentGroups, workflows } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import type {
   Fragment,
@@ -229,6 +229,33 @@ export async function fragmentRoutes(app: FastifyInstance): Promise<void> {
           success: false, code: 'NOT_FOUND', message: `片段 ${id} 不存在`,
         })
       }
+
+      // 引用检查：扫描所有工作流和片段，查找是否有 call 节点引用此片段
+      const referencedBy: string[] = []
+      const allWorkflows = db.select().from(workflows).all()
+      for (const wf of allWorkflows) {
+        const nodes: WorkflowNode[] = JSON.parse(wf.nodesJson)
+        if (nodes.some((n) => n.type === 'call' && n.config.fragmentId === id)) {
+          referencedBy.push(`工作流「${wf.name}」`)
+        }
+      }
+      const allFragments = db.select().from(fragments).all()
+      for (const frag of allFragments) {
+        if (frag.id === id) continue
+        const nodes: WorkflowNode[] = JSON.parse(frag.nodesJson)
+        if (nodes.some((n) => n.type === 'call' && n.config.fragmentId === id)) {
+          referencedBy.push(`片段「${frag.name}」`)
+        }
+      }
+
+      if (referencedBy.length > 0) {
+        return reply.status(400).send({
+          success: false,
+          code: 'FRAGMENT_IN_USE',
+          message: `无法删除：片段「${existing.name}」正被 ${referencedBy.join('、')} 引用`,
+        })
+      }
+
       db.delete(fragments).where(eq(fragments.id, id)).run()
       app.log.info(`Fragment deleted: ${existing.name}`)
       return { success: true as const, data: { id } }

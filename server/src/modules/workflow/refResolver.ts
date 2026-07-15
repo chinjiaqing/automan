@@ -142,20 +142,6 @@ export function resolveValue(
 }
 
 /**
- * 解析 config 中所有引用字段
- */
-export function resolveConfig(
-  config: Record<string, unknown>,
-  outputs: Record<string, Record<string, unknown>>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(config)) {
-    result[key] = resolveValue(value, outputs)
-  }
-  return result
-}
-
-/**
  * 评估条件表达式
  */
 export function evaluateCondition(

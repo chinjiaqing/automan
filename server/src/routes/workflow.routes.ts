@@ -170,6 +170,19 @@ export async function workflowRoutes(app: FastifyInstance, workflowService?: Wor
         })
       }
 
+      // 运行中检查：禁止删除正在运行的工作流
+      if (workflowService) {
+        const runs = workflowService.listRuns()
+        const running = runs.find((r) => r.workflowId === id)
+        if (running) {
+          return reply.status(400).send({
+            success: false,
+            code: 'WORKFLOW_RUNNING',
+            message: `无法删除：工作流「${existing.name}」正在运行中，请先停止`,
+          })
+        }
+      }
+
       db.delete(workflows).where(eq(workflows.id, id)).run()
       app.log.info(`Workflow deleted: ${existing.name}`)
       return { success: true as const, data: { id } }

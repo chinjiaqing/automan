@@ -460,7 +460,7 @@ export interface InputPort {
 /** 节点类型定义 */
 export interface NodeTypeDefinition {
   type: string
-  category: 'flow' | 'action' | 'data' | 'app' | 'debug'
+  category: 'flow' | 'action' | 'data' | 'app' | 'debug' | 'fragment'
   label: string
   icon: string
   /** 节点描述（仅展示） */

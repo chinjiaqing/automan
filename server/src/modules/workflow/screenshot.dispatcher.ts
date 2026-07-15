@@ -74,6 +74,15 @@ export class ScreenshotDispatcher {
     }
   }
 
+  /** 强制停止设备调度器（无视订阅计数，用于 syncDispatcher 等场景） */
+  forceStop(deviceId: string): void {
+    const d = this.dispatchers.get(deviceId)
+    if (!d) return
+    if (d.timer) clearInterval(d.timer)
+    this.dispatchers.delete(deviceId)
+    logger.info('ScreenshotDispatcher', `force-stopped for device ${deviceId}`)
+  }
+
   /** 停止所有调度器 */
   stopAll(): void {
     for (const [id, d] of this.dispatchers) {

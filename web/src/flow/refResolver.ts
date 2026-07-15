@@ -37,6 +37,13 @@ export function resolveRefs(
         continue
       }
 
+      // {{scope.name}} → 作用域引用（session/local/input/global）
+      const scopeRefMatch = /^\{\{(session|local|input|global)\.([^{}]+)\}\}$/.exec(value)
+      if (scopeRefMatch) {
+        result[key] = variables?.[scopeRefMatch[2]] ?? value
+        continue
+      }
+
       // 完整引用替换（值就是引用本身）
       const fullMatch = /^\{\{([^{}.]+)\.([^{}.]+)\}\}$/.exec(value)
       if (fullMatch) {
@@ -47,10 +54,14 @@ export function resolveRefs(
 
       // 内嵌引用替换（字符串中包含多个引用）
       result[key] = value.replace(
-        /\{\{(?:var:([^{}]+)|([^{}.]+)\.([^{}.]+))\}\}/g,
-        (match, varName, nodeId, outputKey) => {
+        /\{\{(?:var:([^{}]+)|(session|local|input|global)\.([^{}]+)|([^{}.]+)\.([^{}.]+))\}\}/g,
+        (match, varName, scope, scopeName, nodeId, outputKey) => {
           if (varName) {
             const v = variables?.[varName]
+            return v !== undefined ? String(v) : match
+          }
+          if (scope && scopeName) {
+            const v = variables?.[scopeName]
             return v !== undefined ? String(v) : match
           }
           const v = context[nodeId]?.[outputKey]

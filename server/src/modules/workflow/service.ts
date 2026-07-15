@@ -70,8 +70,8 @@ export class WorkflowService {
           logger.info('WorkflowService', `auto-cleaned actor ${info.runId} (cancelled=${info.cancelled}, flowState=${info.flowState})`)
         }
       }
-      // 与 stopWorkflow 保持一致：stop 调度器 + 销毁设备会话
-      this.dispatcher.stop(deviceId)
+      // 与 stopWorkflow 保持一致：force-stop 调度器 + 销毁设备会话
+      this.dispatcher.forceStop(deviceId)
       const session = this.deviceSessions.get(deviceId)
       if (session) {
         session.destroy()
