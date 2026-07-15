@@ -61,7 +61,7 @@
     <!-- 中间区域 -->
     <template v-if="currentFragmentId">
       <!-- 节点面板 -->
-      <NodePalette :exclude-types="['call', 'endSuccess', 'endFail', 'end', 'return']" />
+      <NodePalette :exclude-types="['end', 'endSuccess', 'endFail']" />
 
       <!-- 画布 -->
       <div class="frag-canvas" @drop="onDrop" @dragover.prevent>
@@ -123,6 +123,8 @@
         :config="selectedNode.config as Record<string, unknown>"
         :upstream-nodes="upstreamNodes"
         :data-nodes="dataNodes"
+        :fragments="fragmentList"
+        :fragment-outputs="currentOutputs"
         :fragment-mode="true"
         @update:config="onConfigUpdate"
         @update:label="onLabelUpdate"
@@ -219,6 +221,7 @@ import NodePalette from '../components/flow/NodePalette.vue'
 import ConfigPanel from '../components/flow/ConfigPanel.vue'
 import FragmentIOEditor from '../components/flow/FragmentIOEditor.vue'
 import StartNode from '../components/flow/nodes/StartNode.vue'
+import EndNode from '../components/flow/nodes/EndNode.vue'
 import ConditionNode from '../components/flow/nodes/ConditionNode.vue'
 import LoopNode from '../components/flow/nodes/LoopNode.vue'
 import ActionNode from '../components/flow/nodes/ActionNode.vue'
@@ -241,7 +244,7 @@ const groups = ref<FragmentGroup[]>([])
 
 const { addNodes, addEdges, project, fitView } = useVueFlow()
 
-// ── 节点类型映射（片段编辑器：无 call/endSuccess/endFail/end/return）──
+// ── 节点类型映射（片段编辑器：支持 call/return 嵌套；保留工作流级 end/endSuccess/endFail 排除）──
 const nodeTypes: Record<string, any> = {
   start: markRaw(StartNode),
   condition: markRaw(ConditionNode),
@@ -261,6 +264,8 @@ const nodeTypes: Record<string, any> = {
   restartApp: markRaw(ActionNode),
   appRunning: markRaw(ConditionNode),
   log: markRaw(ActionNode),
+  call: markRaw(ActionNode),
+  return: markRaw(EndNode),
 }
 
 const defaultEdgeOpts = {

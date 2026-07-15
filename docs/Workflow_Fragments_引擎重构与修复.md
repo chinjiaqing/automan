@@ -191,6 +191,9 @@ ctx.callDepth = callDepth
 
 ## 8. 已知遗留 / 后续
 
-1. **UI 编辑器尚未开放片段内 `call`/`return`**：`web/src/views/FragmentView.vue` 的 `:exclude-types="['call','endSuccess','endFail','end','return']"` 仍在排除这些节点。引擎已具备嵌套能力，如需可视化支持，移除对应排除项即可（注意 `call` 节点的片段选择/参数表单需配套）。
+1. **UI 编辑器已开放片段内 `call`/`return`**（2026-07-15 补充）：
+   - `FragmentView.vue` 的 `:exclude-types` 改为仅排除工作流级结束节点 `['end','endSuccess','endFail']`，`call`/`return` 已可拖入。
+   - 节点类型映射补充 `call: ActionNode`、`return: EndNode`；`ConfigPanel` 新增 `:fragment-outputs` 支撑 `return` 表单，复用既有 `:fragments` 支撑 `call` 的片段选择与 `arg_*` 传参。
+   - 配套文档见 `docs/开发前必读.md` §20.8。
 2. **变量浅拷贝**：仅基本类型安全，未来支持复杂变量需升级隔离策略（#7）。
 3. **前端算术求值**：后端 `resolveValue` 支持内嵌算术，前端 `resolveRefs` 暂不支持（#15 残留，P3）。

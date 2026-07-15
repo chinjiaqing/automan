@@ -166,13 +166,39 @@
           </div>
           <div v-if="selectedFragment.inputs.length === 0" class="text-xs text-gray-400 py-1">无输入参数</div>
         </div>
-        <div v-if="selectedFragment.outputs.length" class="config-panel__outputs">
+          <div v-if="selectedFragment.outputs.length" class="config-panel__outputs">
           <div class="config-panel__label mb-1">返回输出</div>
           <div v-for="param in selectedFragment.outputs" :key="param.name"
             class="text-xs text-gray-500 flex items-center gap-1">
             <span class="w-2 h-2 rounded-full bg-blue-400" />
             {{ param.label || param.name }}
             <span class="text-gray-400">({{ param.type }})</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- return 节点：片段输出参数表单（将当前片段的输出变量赋值） -->
+      <template v-if="nodeType === 'return' && fragmentOutputs.length">
+        <div class="config-panel__outputs">
+          <div class="config-panel__label mb-1">输出参数</div>
+          <div v-for="param in fragmentOutputs" :key="param.name" class="config-panel__field">
+            <label class="config-panel__label">{{ param.label || param.name }}</label>
+            <ImageValueInput
+              v-if="param.type === 'image'"
+              :model-value="String(getConfig(param.name) ?? '')"
+              :placeholder="`默认: ${param.defaultValue ?? ''}`"
+              :upstream-nodes="referenceNodes"
+              :variable-nodes="dataNodes"
+              @update:modelValue="setConfig(param.name, $event)"
+            />
+            <DataRefInput
+              v-else
+              :value="String(getConfig(param.name) ?? '')"
+              :placeholder="`默认: ${param.defaultValue ?? ''}`"
+              :upstream-nodes="referenceNodes"
+              :variable-nodes="dataNodes"
+              @update:modelValue="setConfig(param.name, $event)"
+            />
           </div>
         </div>
       </template>
@@ -195,7 +221,7 @@ import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import { getNodeTypeDef } from '../../flow/nodeTypes.js'
-import type { NodeTypeDefinition, FieldSchema, Fragment, OutputPort } from '@automan/shared/types.js'
+import type { NodeTypeDefinition, FieldSchema, Fragment, FragmentParam, OutputPort } from '@automan/shared/types.js'
 import DataRefInput from './DataRefInput.vue'
 import DataSourceSelect from './DataSourceSelect.vue'
 import ImageValueInput from './ImageValueInput.vue'
@@ -217,9 +243,12 @@ const props = withDefaults(defineProps<{
   fragments?: Fragment[]
   /** 片段编辑器模式：隐藏作用域字段，强制为"本轮" */
   fragmentMode?: boolean
+  /** return 节点专用：当前片段声明的输出参数（片段编辑器传入 currentOutputs） */
+  fragmentOutputs?: FragmentParam[]
 }>(), {
   fragments: () => [],
   fragmentMode: false,
+  fragmentOutputs: () => [],
 })
 
 const emit = defineEmits<{
