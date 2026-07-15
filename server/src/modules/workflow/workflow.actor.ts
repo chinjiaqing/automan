@@ -60,6 +60,12 @@ export class WorkflowActor extends ActorBase {
     eventBus.on(EventBusEvent.SCREENSHOT_READY, this.screenshotHandler)
 
     this.sendLog('info', `workflow [${this.config.workflow.name}] started`)
+
+    // 定时模式初始为"未激活（等待定时）"，并广播初始状态
+    if (this.config.runConfig.triggerMode === 'scheduled') {
+      this.flowState = 'inactive'
+    }
+    this.emitFlowState()
   }
 
   override async stop(): Promise<void> {
@@ -97,26 +103,24 @@ export class WorkflowActor extends ActorBase {
 
   /**
    * 定时模式专用：由 CronManager 回调调用
-   * - idle 时标记为 pending
-   * - completed 时重置计数器并重新进入 pending（支持次日定时重触发）
+   * 定时信号 = 唤起 + 重置初始参数：
+   *   - 无论当前 idle / completed / inactive，统一重置计数、取消标记、session 变量
+   *   - 进入 pending（激活），等待下次截图执行
+   *   - 正在执行中（busy）则不叠加、不打断，跳过本次唤醒
    */
   markPending(): void {
-    if (this.flowState === 'completed') {
-      // 新一轮开始：重置计数器和取消标记
-      this.successCount = 0
-      this.failCount = 0
-      this.cancelled = false
-      this.flowState = 'pending'
-      this.sendLog('info', `定时信号到达（重置计数），等待下次截图执行`)
-      this.emitFlowState()
+    // 正在执行中：不叠加、不打断，跳过本次唤醒
+    if (this.busy) {
+      this.sendLog('info', `定时信号到达，但任务正在执行中，跳过本次唤醒`)
       return
     }
-    if (this.flowState !== 'idle') {
-      // flowState 冲突时跳过
-      return
-    }
+    // 每次定时唤醒 = 全新激活：统一重置初始参数
+    this.successCount = 0
+    this.failCount = 0
+    this.cancelled = false
+    this.sessionVars = {}
     this.flowState = 'pending'
-    this.sendLog('info', `定时信号到达，等待下次截图执行`)
+    this.sendLog('info', `定时信号到达：重置参数并唤醒，等待下次截图执行`)
     this.emitFlowState()
   }
 
@@ -126,7 +130,7 @@ export class WorkflowActor extends ActorBase {
   private async onScreenshot(event: ScreenshotEvent): Promise<void> {
     if (!this.isRunning()) return
     // 达标或已取消：不处理截图
-    if (this.flowState === 'completed' || this.cancelled) return
+    if (this.flowState === 'completed' || this.flowState === 'inactive' || this.cancelled) return
     if (this.busy) {
       // 忙时跳过截图
       return
@@ -239,41 +243,66 @@ export class WorkflowActor extends ActorBase {
     }
     this.emitFlowState()
 
-    // 检查成功上限
-    const { maxSuccessCount, maxFailCount } = this.config.runConfig
+    const { maxSuccessCount, maxFailCount, triggerMode } = this.config.runConfig
+
+    // 成功上限
     if (maxSuccessCount > 0 && this.successCount >= maxSuccessCount) {
-      this.sendLog('info', `✓ 成功 ${this.successCount} 次，达到上限 ${maxSuccessCount}，自动停止`)
-      this.flowState = 'completed'
-      this.cancelled = true
+      this.sendLog('info', `✓ 成功 ${this.successCount} 次，达到上限 ${maxSuccessCount}，${triggerMode === 'scheduled' ? '回到等待定时' : '自动停止'}`)
+      if (triggerMode === 'scheduled') {
+        this.flowState = 'inactive'
+        this.cancelled = false
+      } else {
+        this.flowState = 'completed'
+        this.cancelled = true
+      }
       this.emitFlowState()
       return
     }
 
-    // 检查失败上限
+    // 失败上限
     if (maxFailCount > 0 && this.failCount >= maxFailCount) {
-      this.sendLog('error', `✗ 失败 ${this.failCount} 次，达到上限 ${maxFailCount}，自动停止`)
-      this.flowState = 'completed'
-      this.cancelled = true
+      this.sendLog('error', `✗ 失败 ${this.failCount} 次，达到上限 ${maxFailCount}，${triggerMode === 'scheduled' ? '回到等待定时' : '自动停止'}`)
+      if (triggerMode === 'scheduled') {
+        this.flowState = 'inactive'
+        this.cancelled = false
+      } else {
+        this.flowState = 'completed'
+        this.cancelled = true
+      }
       this.emitFlowState()
       return
     }
 
-    // 未达到上限，回到 idle
-    if (this.flowState !== 'idle') {
-      // success/fail 瞬态后回到 idle
+    // 未达标：定时模式回到 pending 等待下次截图；立即模式回到 idle
+    // （此时 flowState 必为 success/fail/idle 之一，直接覆盖即可）
+    if (triggerMode === 'scheduled') {
+      this.flowState = 'pending'
+      this.emitFlowState()
+    } else {
       this.flowState = 'idle'
       this.emitFlowState()
     }
+  }
+
+  /** 是否需要截图（供 WorkflowService.syncDispatcher 决策） */
+  needsScreenshot(): boolean {
+    if (this.cancelled) return false
+    // 立即模式：始终需要截图（每次都执行）
+    if (this.config.runConfig.triggerMode !== 'scheduled') return true
+    // 定时模式：仅 pending/processing（已唤醒、活跃执行）需要截图
+    return this.flowState === 'pending' || this.flowState === 'processing'
   }
 
   /** 定时模式下，执行完毕后自动进入 pending 等待下次截图 */
   private autoPending(): void {
     if (this.cancelled) return
     if (this.config.runConfig.triggerMode !== 'scheduled') return
-    if (this.flowState === 'completed') return
-    this.flowState = 'pending'
-    this.sendLog('info', `等待下次截图继续执行`)
-    this.emitFlowState()
+    if (this.flowState === 'completed' || this.flowState === 'inactive') return
+    if (this.flowState !== 'pending') {
+      this.flowState = 'pending'
+      this.sendLog('info', `等待下次截图继续执行`)
+      this.emitFlowState()
+    }
   }
 
   /** 初始化变量：local 重置，session 保留 */
@@ -342,7 +371,9 @@ export class WorkflowActor extends ActorBase {
   /** 广播 flow 执行状态变更 */
   private emitFlowState(): void {
     const state = this.flowState === 'completed' ? 'stopped'
-      : (this.flowState === 'fail' ? 'error' : 'running')
+      : this.flowState === 'fail' ? 'error'
+      : this.flowState === 'inactive' ? 'idle'
+      : 'running'
     eventBus.emit(EventBusEvent.WORKFLOW_STATE, {
       runId: this.config.runId,
       workflowId: this.config.workflow.id,

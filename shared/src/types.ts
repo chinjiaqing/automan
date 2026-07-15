@@ -575,7 +575,7 @@ export enum WorkflowRunState {
 }
 
 /** 工作流 flow 执行状态（Actor 内部状态机） */
-export type FlowState = 'idle' | 'pending' | 'processing' | 'success' | 'fail' | 'completed'
+export type FlowState = 'idle' | 'pending' | 'processing' | 'success' | 'fail' | 'completed' | 'inactive'
 
 /** 启动工作流请求 */
 export interface RunWorkflowRequest {

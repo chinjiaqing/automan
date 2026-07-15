@@ -207,6 +207,7 @@ function flowStateLabel(state: FlowState): string {
     success: '成功',
     fail: '失败',
     completed: '已完成',
+    inactive: '等待定时',
   }
   return map[state]
 }
@@ -219,6 +220,7 @@ function flowStateClass(state: FlowState): string {
     success: 'bg-green-100 text-green-700',
     fail: 'bg-red-100 text-red-700',
     completed: 'bg-purple-100 text-purple-700',
+    inactive: 'bg-sky-100 text-sky-700',
   }
   return map[state]
 }

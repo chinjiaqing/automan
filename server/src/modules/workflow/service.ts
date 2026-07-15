@@ -37,7 +37,9 @@ export class WorkflowService {
     })
   }
 
-  /** 截图启停唯一决策点：根据设备下所有 actor 状态决定是否需要截图 */
+  /** 截图启停唯一决策点：根据设备下所有 actor 状态决定是否需要截图
+   *  设备级任务（截图循环 entry + 设备会话）常驻——workflow 达标/未激活时
+   *  仅暂停截图识别，不销毁、不清定时器、不删除 actor（等待下次定时唤醒）。 */
   private syncDispatcher(deviceId: string): void {
     // 手动暂停期间不自动恢复
     if (this.pausedDevices.has(deviceId)) return
@@ -47,38 +49,17 @@ export class WorkflowService {
     )
     if (deviceActors.length === 0) return
 
-    // cancelled 的 actor（设备级错误/达标自动停止）不再需要截图
-    const needScreenshot = deviceActors.some((a) => {
-      const info = a.getInfo()
-      return info.flowState !== 'completed' && !info.cancelled
-    })
+    // 任一 actor 处于活跃执行态（立即模式常驻 / 定时模式 pending|processing）才需要截图
+    const needScreenshot = deviceActors.some((a) => a.needsScreenshot())
 
     if (needScreenshot) {
       this.dispatcher.resume(deviceId)
     } else {
+      // 无活跃 workflow：仅暂停截图识别，设备级任务（截图循环 + 会话）常驻
       this.dispatcher.pause(deviceId)
     }
 
-    // 所有 actor 都不再需要截图时，自动清理已完成/已取消的 actor
-    if (!needScreenshot) {
-      for (const actor of deviceActors) {
-        const info = actor.getInfo()
-        if (info.cancelled || info.flowState === 'completed') {
-          this.cronManager.unregister(info.deviceId, info.workflowId)
-          actor.stop() // fire-and-forget：已取消的 actor 无需等待
-          this.actors.delete(info.runId)
-          logger.info('WorkflowService', `auto-cleaned actor ${info.runId} (cancelled=${info.cancelled}, flowState=${info.flowState})`)
-        }
-      }
-      // 与 stopWorkflow 保持一致：force-stop 调度器 + 销毁设备会话
-      this.dispatcher.forceStop(deviceId)
-      const session = this.deviceSessions.get(deviceId)
-      if (session) {
-        session.destroy()
-        this.deviceSessions.delete(deviceId)
-      }
-      this.emitDeviceRunStatus(deviceId)
-    }
+    this.emitDeviceRunStatus(deviceId)
   }
 
   /** 从 DB 加载运行配置，不存在则返回默认配置 */

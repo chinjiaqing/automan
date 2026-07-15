@@ -167,10 +167,12 @@ ctx.callDepth = callDepth
 `WorkflowService.syncDispatcher` 改为：
 
 - 需要截图 → `dispatcher.resume(deviceId)`
-- 不需要截图 → `dispatcher.pause(deviceId)`，并在全部 actor 取消/completed 后 `dispatcher.forceStop(deviceId)`
+- 不需要截图 → `dispatcher.pause(deviceId)`
 - **不再调用 `stop()` 减计数**，`start()` 的订阅计数仅用于显式 `stopWorkflow` 路径
 
 避免了 `syncDispatcher` 多次触发导致 `start()/stop()` 计数失准、调度器提前停止或无法停止的问题。
+
+> ⚠️ 2026-07-15 修订：本节初版的 `syncDispatcher` 会在"全部 actor completed/cancelled"时执行 `forceStop(deviceId)` + `session.destroy()` + `cronManager.unregister()`，导致定时 workflow 达标后误杀设备级会话与兄弟定时 job（详见第 9 节）。现已改为"设备级常驻，仅 pause 截图"。
 
 ---
 
@@ -189,7 +191,52 @@ ctx.callDepth = callDepth
 
 ---
 
-## 8. 已知遗留 / 后续
+## 9. 设备级生命周期与定时触发解耦（2026-07-15）
+
+### 9.1 复现的 Bug
+
+单设备 + 单脚本，定时模式设两个时间点（如 14:53 / 14:54），完成条件均为"成功 1 次后停止"。当 14:53 达标后：该任务标记完成 → **设备级任务被自动结束 → 14:54 定时被销毁 → 设备会话被销毁**。
+
+### 9.2 根因
+
+`syncDispatcher` 的"全部 actor completed/cancelled"分支执行了整套拆除：`cronManager.unregister(deviceId, workflowId)` 会按 `deviceId:workflowId` 整组删除**同一 workflow 的全部定时 job（含 14:54）**；`dispatcher.forceStop()` 端掉截图循环；`session.destroy()` 销毁设备会话；`actors.delete()` 删除 actor。这与"cron 生命周期由设备级 start/stop 控制、completed 不触发销毁"的设计注释自相矛盾。
+
+### 9.3 需求重定义
+
+1. **设备级任务常驻**：无激活 workflow 时，截图循环 entry 与设备会话保留，仅**暂停截图识别**（`pause`），不销毁。设备级只由显式 `stopWorkflow` / `stopByDevice` 释放。
+2. **定时 = 触发器 + 初始化器**：定时点到达 = 将 workflow 从"未激活"变为"激活"，并**重置初始参数**（计数清零、取消标记清除、`session` 变量清空、`input`/`local` 变量复位）。多个定时点互不叠加。
+3. **cron 每天重复、持久**：`cron.manager` 表达式本就是 `${minute} ${hour} * * *`（每天 HH:MM），不应被自动清除。
+
+### 9.4 修复方案
+
+引入新的 `FlowState = 'inactive'`（未激活 / 等待定时），明确区分"达标真停（`completed`，立即模式）"与"达标回等待（`inactive`，定时模式）"两种语义：
+
+| 文件 | 改动 |
+|------|------|
+| `shared/src/types.ts` | `FlowState` 新增 `'inactive'` |
+| `workflow.actor.ts` | 定时模式启动即 `inactive`；`markPending` 统一"唤醒 + 重置"（`busy` 时跳过，不叠加）；`processResult` 达标后**定时模式回 `inactive`、立即模式才 `completed`**；`onScreenshot` 跳过 `inactive`；新增 `needsScreenshot()`；`emitFlowState` 映射 `inactive → 'idle'` |
+| `service.ts` | `syncDispatcher` 重写为"设备级常驻"：仅 `dispatcher.pause(deviceId)`，**移除** `forceStop` / `session.destroy` / `cronManager.unregister` / `actors.delete`；截图判断改用 `actor.needsScreenshot()` |
+| `web/src/components/WorkflowListPanel.vue` | `flowStateLabel`/`flowStateClass` 补 `inactive: '等待定时'` |
+
+状态机（定时模式）：
+
+```
+inactive ──(定时到达: 重置+唤醒)──> pending ──(截图)──> processing
+   ▲                                                        │
+   └──────────(达标: 回未激活, 等下次定时)──────────────────┘
+                      (未达标: autoPending → pending)
+```
+
+- 用户主动停止（`stopWorkflow`）路径不变：仍 `cronManager.unregister` + `session.destroy`，符合"用户结束就释放设备"预期。
+- `session` 变量因仅绑定当前 actor（`device+workflow` 唯一实例），故每次定时唤醒随之清空，实现"每次全新激活"。
+
+### 9.5 附带修复
+
+`server/src/db/index.ts`：显式标注 `export const sqlite: DatabaseType`，修复 `declaration: true` 下 `better-sqlite3` 类型无法命名的 TS4023（既有问题，本次顺带清零 server 类型检查）。
+
+---
+
+## 10. 已知遗留 / 后续
 
 1. **UI 编辑器已开放片段内 `call`/`return`**（2026-07-15 补充）：
    - `FragmentView.vue` 的 `:exclude-types` 改为仅排除工作流级结束节点 `['end','endSuccess','endFail']`，`call`/`return` 已可拖入。
